@@ -15,6 +15,7 @@ export default function App() {
   if (screen === 'select') {
     return (
       <PlotSelect
+        unlocked={g.unlockedPlots}
         onSelect={(i) => {
           g.selectPlot(i);
           setScreen('play');
