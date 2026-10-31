@@ -39,7 +39,7 @@ export default function App() {
         <Sparkles pos={g.sparkle} />
       </div>
       <div style={{ marginTop: 12 }}>
-        <OrderPanel orders={g.orders} onServe={g.serveOrder} />
+        <OrderPanel orders={g.orders} board={g.board} onServe={g.serveOrder} />
       </div>
       <GardenLevelBar stars={g.progress.stars} />
       {g.starsThisPlot >= g.plot.starQuota && (
