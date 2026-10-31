@@ -22,6 +22,7 @@ export function useGame() {
   const [starsThisPlot, setStarsThisPlot] = useState(0);
   const [nudge, setNudge] = useState(false);
   const [hint, setHint] = useState<{ a: Position; b: Position } | null>(null);
+  const [sparkle, setSparkle] = useState<Position | null>(null);
   const dragFrom = useRef<Position | null>(null);
   const lastAction = useRef(Date.now());
 
@@ -71,6 +72,7 @@ export function useGame() {
     setBoard((b) => {
       const res: MergeResult = mergeAt(b, from, to);
       if (res.kind === 'none') return b;
+      if (res.kind === 'merge' && res.spawned.length) setSparkle(res.spawned[0]);
       return res.board;
     });
     bump();
@@ -154,6 +156,7 @@ export function useGame() {
     starsThisPlot,
     nudge,
     hint,
+    sparkle,
     dragFrom,
     handleDrop,
     tapSource,

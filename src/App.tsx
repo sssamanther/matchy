@@ -6,6 +6,7 @@ import OrderPanel from './components/OrderPanel';
 import GardenLevelBar from './components/GardenLevelBar';
 import PlotSelect from './components/PlotSelect';
 import PlotComplete from './components/PlotComplete';
+import Sparkles from './components/Sparkles';
 
 export default function App() {
   const g = useGame();
@@ -37,7 +38,10 @@ export default function App() {
           <Source key={i} chain={s.chain} onTap={() => g.tapSource(i)} />
         ))}
       </div>
-      <Board board={g.board} nudge={g.nudge} hint={g.hint} onDrop={g.handleDrop} />
+      <div style={{ position: 'relative' }}>
+        <Board board={g.board} nudge={g.nudge} hint={g.hint} onDrop={g.handleDrop} />
+        <Sparkles pos={g.sparkle} />
+      </div>
       <div style={{ marginTop: 12 }}>
         <OrderPanel orders={g.orders} onServe={g.serveOrder} />
       </div>
