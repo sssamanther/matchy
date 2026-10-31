@@ -10,6 +10,7 @@ import {
 import { PLOTS } from '../game/plots';
 import { generateOrder, canFulfill } from '../game/orders';
 import { initialProgress } from '../game/progress';
+import { loadProgress, saveProgress } from '../storage';
 import type { Plot, Progress, Board, Order, Position, Source, ChainId } from '../game/types';
 
 export function useGame() {
@@ -17,7 +18,7 @@ export function useGame() {
   const plot = PLOTS[plotIndex];
   const [board, setBoard] = useState<Board>(() => initBoard(plot));
   const [orders, setOrders] = useState<Order[]>(() => initOrders(plot));
-  const [progress, setProgress] = useState<Progress>(initialProgress);
+  const [progress, setProgress] = useState<Progress>(() => loadProgress() ?? initialProgress());
   const [starsThisPlot, setStarsThisPlot] = useState(0);
   const [nudge, setNudge] = useState(false);
   const [hint, setHint] = useState<{ a: Position; b: Position } | null>(null);
@@ -36,6 +37,11 @@ export function useGame() {
     }, 10000);
     return () => clearInterval(id);
   }, [plot]);
+
+  // persist progress
+  useEffect(() => {
+    saveProgress(progress);
+  }, [progress]);
 
   // idle hint after ~8s
   useEffect(() => {
