@@ -27,10 +27,14 @@ export function resetItemIds(): void {
 /** Back-compat alias used by older tests. */
 export const resetTileIds = resetItemIds;
 
-function makeItem(chain: ChainId, tier: number, spawnRow?: number): Item {
+export function createItem(chain: ChainId, tier: number, spawnRow?: number): Item {
   const item: Item = { id: nextItemId++, chain, tier };
   if (spawnRow !== undefined) item.spawnRow = spawnRow;
   return item;
+}
+
+function makeItem(chain: ChainId, tier: number, spawnRow?: number): Item {
+  return createItem(chain, tier, spawnRow);
 }
 
 function inBounds(pos: Position): boolean {

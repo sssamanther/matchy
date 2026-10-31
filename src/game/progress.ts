@@ -1,5 +1,6 @@
 import { PLOTS } from './plots';
 import type { Progress } from './types';
+export type { Progress };
 
 export const GARDEN_LEVEL_THRESHOLDS = [0, 5, 15, 30, 50, 80];
 
