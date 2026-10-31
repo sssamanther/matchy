@@ -7,7 +7,7 @@ import {
   generatorSpawnCell,
 } from './board';
 import { PLOTS } from './plots';
-import { generateOrder } from './orders';
+import { generateOrder, rewardFor } from './orders';
 import { initialProgress, type Progress } from './progress';
 import { CHAIN_TIER_COUNT } from './types';
 import type { ChainId } from './types';
@@ -62,9 +62,9 @@ function initBoard(plot: Plot): Board {
 function initOrders(plot: Plot): Order[] {
   const chains = plot.sources.map((s) => s.chain);
   const out: Order[] = [];
+  const ctxBase = { chains, completedOrders: 0, existingOrders: out, board: createEmptyBoard() };
   for (let i = 0; i < 3; i++) {
-    const chain = chains.length ? chains[Math.floor(Math.random() * chains.length)] : 'frog';
-    out.push(generateOrder(chain, 1, 1));
+    out.push(generateOrder({ ...ctxBase, existingOrders: [...out] }));
   }
   return out;
 }
@@ -76,7 +76,7 @@ export function createInitialState(saved?: PersistedGameState | null): GameState
       plotIndex: saved.plotIndex,
       board: saved.board,
       orders: saved.orders,
-      progress: saved.progress,
+      progress: { ...saved.progress, completedOrders: saved.progress.completedOrders ?? 0 },
       unlockedPlots: saved.unlockedPlots ?? [1],
       hint: null,
       sparkle: null,
@@ -160,16 +160,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
       }
 
-      const newOrder = generateOrder(
-        (PLOTS[state.plotIndex]?.sources[0]?.chain) ?? 'frog',
-        1,
-        1,
-      );
+      const reward = rewardFor(order);
+      const newCompleted = state.progress.completedOrders + 1;
+      const chains = (PLOTS[state.plotIndex]?.sources ?? []).map((s) => s.chain);
+      const newOrder = generateOrder({
+        chains,
+        completedOrders: newCompleted,
+        existingOrders: state.orders.filter((o) => o.id !== action.orderId),
+        board: nextBoard,
+      });
 
       const newProgress: Progress = {
         ...state.progress,
-        stars: state.progress.stars + 1,
-        plotStars: state.progress.plotStars + 1,
+        stars: state.progress.stars + reward,
+        plotStars: state.progress.plotStars + reward,
+        completedOrders: newCompleted,
       };
 
       return {

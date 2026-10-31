@@ -14,27 +14,27 @@ export const PLOTS: Plot[] = [
       { pos: { row: 5, col: 5 }, chain: 'frog', tier: 1 },
       { pos: { row: 5, col: 4 }, chain: 'frog', tier: 1 },
     ],
-    starQuota: 1,
+    starQuota: 3,
   },
   {
     id: 2, name: 'Frog Pond', emoji: '🐸',
     sources: [src(0, 3, 'frog'), src(6, 3, 'flower')],
-    starQuota: 5,
+    starQuota: 10,
   },
   {
     id: 3, name: 'Mushroom Grove', emoji: '🍄',
     sources: [src(0, 0, 'mushroom'), src(0, 6, 'berry'), src(6, 0, 'flower'), src(6, 6, 'frog')],
-    starQuota: 10,
+    starQuota: 20,
   },
   {
     id: 4, name: 'Berry Bush', emoji: '🫐',
     sources: [src(2, 2, 'berry'), src(4, 4, 'mushroom')],
-    starQuota: 15,
+    starQuota: 35,
   },
   {
     id: 5, name: 'Garden Party', emoji: '🎉',
     sources: [src(0, 0, 'flower'), src(0, 6, 'frog'), src(6, 0, 'mushroom'), src(6, 6, 'berry')],
-    starQuota: 20,
+    starQuota: 55,
   },
 ];
 

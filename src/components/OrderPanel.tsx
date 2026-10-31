@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CHAIN_EMOJI, CHAIN_TIER_LABELS } from '../game/types';
 import type { Board, Order } from '../game/types';
-import { canFulfill } from '../game/orders';
+import { canFulfill, rewardFor } from '../game/orders';
 
 function collected(board: Board, order: Order): number {
   let n = 0;
@@ -82,7 +82,7 @@ export default function OrderPanel({
                 {have}/{o.count} collected
               </div>
               <div style={{ textAlign: 'center', fontSize: 12, color: '#f9a825' }}>
-                Reward: +1 ⭐
+                Reward: +{rewardFor(o)} ⭐
               </div>
               {ready && (
                 <div style={{ textAlign: 'center', color: '#2e7d32', fontWeight: 'bold' }}>

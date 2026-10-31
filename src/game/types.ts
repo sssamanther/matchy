@@ -82,4 +82,5 @@ export interface Progress {
   currentPlot: number;
   stars: number; // lifetime stars (global Garden Level)
   plotStars: number; // stars earned on current plot
+  completedOrders: number; // total orders completed (drives difficulty)
 }

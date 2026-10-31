@@ -18,5 +18,5 @@ export function gardenLevel(stars: number): number {
 }
 
 export function initialProgress(): Progress {
-  return { currentPlot: 1, stars: 0, plotStars: 0 };
+  return { currentPlot: 1, stars: 0, plotStars: 0, completedOrders: 0 };
 }
