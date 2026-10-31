@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   createEmptyBoard,
   createItem,
-  emptyCells,
   spawnItem,
   mergeAt,
+  findMergeHint,
   type MergeResult,
 } from '../game/board';
 import { PLOTS } from '../game/plots';
@@ -20,7 +20,9 @@ export function useGame() {
   const [progress, setProgress] = useState<Progress>(initialProgress);
   const [starsThisPlot, setStarsThisPlot] = useState(0);
   const [nudge, setNudge] = useState(false);
+  const [hint, setHint] = useState<{ a: Position; b: Position } | null>(null);
   const dragFrom = useRef<Position | null>(null);
+  const lastAction = useRef(Date.now());
 
   // rain ambient drop every 10s
   useEffect(() => {
@@ -35,21 +37,38 @@ export function useGame() {
     return () => clearInterval(id);
   }, [plot]);
 
+  // idle hint after ~8s
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (Date.now() - lastAction.current >= 8000) {
+        setBoard((b) => {
+          const h = findMergeHint(b);
+          if (h) setHint({ a: h[0], b: h[1] });
+          return b;
+        });
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const nudgeBoard = useCallback(() => {
     setNudge(true);
     setTimeout(() => setNudge(false), 400);
+  }, []);
+
+  const bump = useCallback(() => {
+    lastAction.current = Date.now();
+    setHint(null);
   }, []);
 
   const handleDrop = useCallback((from: Position, to: Position) => {
     setBoard((b) => {
       const res: MergeResult = mergeAt(b, from, to);
       if (res.kind === 'none') return b;
-      if (res.kind === 'move' && emptyCells(b).length === 0) {
-        // shouldn't happen
-      }
       return res.board;
     });
-  }, []);
+    bump();
+  }, [bump]);
 
   const tapSource = useCallback((sourceIdx: number) => {
     const source = plot.sources[sourceIdx];
@@ -59,7 +78,8 @@ export function useGame() {
       if (!res.pos) { nudgeBoard(); return b; }
       return res.board;
     });
-  }, [plot, nudgeBoard]);
+    bump();
+  }, [plot, nudgeBoard, bump]);
 
   const serveOrder = useCallback((orderId: number) => {
     setOrders((prev) => {
@@ -97,7 +117,8 @@ export function useGame() {
       );
       return prev.map((o) => (o.id === orderId ? newOrder : o));
     });
-  }, [plot]);
+    bump();
+  }, [plot, bump]);
 
   const nextPlot = useCallback(() => {
     if (plotIndex + 1 >= PLOTS.length) return;
@@ -108,6 +129,16 @@ export function useGame() {
     setStarsThisPlot(0);
   }, [plotIndex]);
 
+  const selectPlot = useCallback((i: number) => {
+    const p = PLOTS[i];
+    if (!p) return;
+    setPlotIndex(i);
+    setBoard(initBoard(p));
+    setOrders(initOrders(p));
+    setStarsThisPlot(0);
+    bump();
+  }, [bump]);
+
   return {
     plot,
     plotIndex,
@@ -116,11 +147,13 @@ export function useGame() {
     progress,
     starsThisPlot,
     nudge,
+    hint,
     dragFrom,
     handleDrop,
     tapSource,
     serveOrder,
     nextPlot,
+    selectPlot,
   };
 }
 

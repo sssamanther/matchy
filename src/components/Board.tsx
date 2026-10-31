@@ -5,10 +5,12 @@ import type { Board as BoardType, Position } from '../game/types';
 export default function Board({
   board,
   nudge,
+  hint,
   onDrop,
 }: {
   board: BoardType;
   nudge: boolean;
+  hint: { a: Position; b: Position } | null;
   onDrop: (from: Position, to: Position) => void;
 }) {
   const dragFrom = useRef<Position | null>(null);
@@ -41,7 +43,10 @@ export default function Board({
             style={{
               width: 56,
               height: 56,
-              background: '#fff',
+              background:
+                hint && ((hint.a.row === r && hint.a.col === c) || (hint.b.row === r && hint.b.col === c))
+                  ? '#fff59d'
+                  : '#fff',
               borderRadius: 8,
               border: '1px solid #c8e6c9',
               display: 'flex',
