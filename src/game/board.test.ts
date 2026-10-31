@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   boardFromRows,
   createEmptyBoard,
+  createGenerator,
   emptyCells,
   findMergeHint,
+  generatorSpawnCell,
   hasMergePair,
   mergeAt,
   resetItemIds,
   spawnItem,
 } from './board';
+import { isGenerator } from './types';
 import { GRID_SIZE } from './types';
 
 beforeEach(() => {
@@ -31,7 +34,7 @@ describe('mergeAt', () => {
     board[0][1] = { id: 2, chain: 'frog', tier: 1 };
     const res = mergeAt(board, { row: 0, col: 0 }, { row: 0, col: 1 });
     expect(res.kind).toBe('merge');
-    expect(res.board[0][1]?.tier).toBe(2);
+    expect((res.board[0][1] as any)?.tier).toBe(2);
     expect(res.board[0][0]).toBeNull();
     expect(res.consumed).toBe(2);
   });
@@ -104,5 +107,41 @@ describe('emptyCells', () => {
   it('counts holes', () => {
     const board = createEmptyBoard();
     expect(emptyCells(board).length).toBe(GRID_SIZE * GRID_SIZE);
+  });
+});
+
+describe('generators', () => {
+  it('occupy cells and are detected', () => {
+    const board = createEmptyBoard();
+    board[1][1] = createGenerator('flower');
+    expect(isGenerator(board[1][1])).toBe(true);
+    expect(emptyCells(board).length).toBe(GRID_SIZE * GRID_SIZE - 1);
+  });
+
+  it('generatorSpawnCell picks first empty neighbor', () => {
+    const board = createEmptyBoard();
+    board[1][1] = createGenerator('flower');
+    const pos = generatorSpawnCell(board, { row: 1, col: 1 });
+    expect(pos).not.toBeNull();
+  });
+
+  it('returns null when surrounded', () => {
+    const board = createEmptyBoard();
+    board[1][1] = createGenerator('flower');
+    for (const [dr, dc] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]] as const) {
+      board[1+dr][1+dc] = { id: 999, chain: 'frog', tier: 1 };
+    }
+    expect(generatorSpawnCell(board, { row: 1, col: 1 })).toBeNull();
+  });
+
+  it('generators cannot be merged or moved', () => {
+    const board = createEmptyBoard();
+    board[0][0] = createGenerator('flower');
+    board[0][1] = createGenerator('flower');
+    const res = mergeAt(board, { row: 0, col: 0 }, { row: 0, col: 1 });
+    expect(res.kind).toBe('none');
+    // move attempt
+    const res2 = mergeAt(board, { row: 0, col: 0 }, { row: 1, col: 1 });
+    expect(res2.kind).toBe('none');
   });
 });

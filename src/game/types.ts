@@ -33,7 +33,22 @@ export interface Item {
   spawnRow?: number;
 }
 
-export type Cell = Item | null;
+export interface Generator {
+  /** Stable identity. */
+  id: number;
+  kind: 'generator';
+  chain: ChainId;
+}
+
+export type Cell = Item | Generator | null;
+
+export function isGenerator(cell: Cell): cell is Generator {
+  return cell !== null && (cell as Generator).kind === 'generator';
+}
+
+export function isItem(cell: Cell): cell is Item {
+  return cell !== null && (cell as Generator).kind !== 'generator' && 'tier' in (cell as Item);
+}
 /** grid[row][col] */
 export type Board = Cell[][];
 

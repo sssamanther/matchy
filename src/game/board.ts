@@ -13,8 +13,11 @@ import {
   type Board,
   type Cell,
   type ChainId,
+  type Generator,
   type Item,
   type Position,
+  isGenerator,
+  isItem,
 } from './types';
 
 let nextItemId = 1;
@@ -22,6 +25,15 @@ let nextItemId = 1;
 /** Test helper — keeps ids deterministic across test runs. */
 export function resetItemIds(): void {
   nextItemId = 1;
+}
+
+export function resetGeneratorIds(): void {
+  // shared counter; reset same as items
+  nextItemId = 1;
+}
+
+export function createGenerator(chain: ChainId): Generator {
+  return { id: nextItemId++, kind: 'generator', chain };
 }
 
 /** Back-compat alias used by older tests. */
@@ -41,8 +53,8 @@ function inBounds(pos: Position): boolean {
   return pos.row >= 0 && pos.row < GRID_SIZE && pos.col >= 0 && pos.col < GRID_SIZE;
 }
 
-function sameItem(a: Item | null, b: Item | null): boolean {
-  return a !== null && b !== null && a.chain === b.chain && a.tier === b.tier;
+function sameItem(a: Cell, b: Cell): boolean {
+  return a !== null && b !== null && 'tier' in a && 'tier' in b && a.chain === b.chain && a.tier === b.tier;
 }
 
 function cloneBoard(board: Board): Board {
@@ -73,7 +85,7 @@ export function hasMergePair(board: Board): boolean {
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
       const cell = board[row][col];
-      if (!cell) continue;
+      if (!cell || !('tier' in cell)) continue;
       const key = `${cell.chain}:${cell.tier}`;
       if (seen.has(key)) return true;
       seen.add(key);
@@ -88,7 +100,7 @@ export function findMergeHint(board: Board): [Position, Position] | null {
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
       const cell = board[row][col];
-      if (!cell) continue;
+      if (!cell || !('tier' in cell)) continue;
       const key = `${cell.chain}:${cell.tier}`;
       const prev = byKey.get(key);
       if (prev) return [prev, { row, col }];
@@ -156,6 +168,12 @@ export function mergeAt(board: Board, from: Position, to: Position): MergeResult
   const itemTo = board[to.row][to.col];
   if (!itemFrom) return { board, kind: 'none', spawned: [], consumed: 0 };
 
+  // Generators are immovable and cannot be merged/consumed.
+  if (isGenerator(itemFrom) || isGenerator(itemTo ?? null)) {
+    return { board, kind: 'none', spawned: [], consumed: 0 };
+  }
+  if (!isItem(itemFrom)) return { board, kind: 'none', spawned: [], consumed: 0 };
+
   const next = cloneBoard(board);
 
   // Move onto empty cell.
@@ -166,7 +184,7 @@ export function mergeAt(board: Board, from: Position, to: Position): MergeResult
   }
 
   // Merge requires identical chain+tier and room to tier up.
-  if (!sameItem(itemFrom, itemTo)) {
+  if (!isItem(itemTo) || !sameItem(itemFrom, itemTo)) {
     return { board, kind: 'none', spawned: [], consumed: 0 };
   }
   if (itemFrom.tier >= CHAIN_TIER_COUNT) {
@@ -200,6 +218,26 @@ export function mergeAt(board: Board, from: Position, to: Position): MergeResult
   }
 
   return { board: next, kind: 'merge', spawned, consumed: totalConsumed };
+}
+
+// ---------------------------------------------------------------------------
+// Generator adjacency
+// ---------------------------------------------------------------------------
+
+const NEIGHBOR_OFFSETS: Array<[number, number]> = [
+  [-1, -1], [-1, 0], [-1, 1],
+  [0, -1],           [0, 1],
+  [1, -1],  [1, 0],  [1, 1],
+];
+
+export function generatorSpawnCell(board: Board, pos: Position): Position | null {
+  for (const [dr, dc] of NEIGHBOR_OFFSETS) {
+    const r = pos.row + dr;
+    const c = pos.col + dc;
+    if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) continue;
+    if (board[r][c] === null) return { row: r, col: c };
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

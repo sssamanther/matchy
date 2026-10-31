@@ -51,6 +51,11 @@ export function useGame() {
     bump();
   }, [bump]);
 
+  const tapGenerator = useCallback((pos: Position) => {
+    dispatch({ type: 'TAP_GENERATOR', pos });
+    bump();
+  }, [bump]);
+
   const handleDrop = useCallback((from: Position, to: Position) => {
     dispatch({ type: 'DROP', from, to });
     bump();
@@ -98,6 +103,7 @@ export function useGame() {
     unlockedPlots: state.unlockedPlots,
     handleDrop,
     tapSource,
+    tapGenerator,
     serveOrder,
     nextPlot,
     selectPlot,

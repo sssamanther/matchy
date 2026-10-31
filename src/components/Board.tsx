@@ -1,5 +1,7 @@
 import { useRef } from 'react';
 import Item from './Item';
+import Generator from './Generator';
+import { isGenerator } from '../game/types';
 import type { Board as BoardType, Position } from '../game/types';
 
 export default function Board({
@@ -7,11 +9,13 @@ export default function Board({
   nudge,
   hint,
   onDrop,
+  onGeneratorTap,
 }: {
   board: BoardType;
   nudge: boolean;
   hint: { a: Position; b: Position } | null;
   onDrop: (from: Position, to: Position) => void;
+  onGeneratorTap: (pos: Position) => void;
 }) {
   const dragFrom = useRef<Position | null>(null);
 
@@ -55,12 +59,16 @@ export default function Board({
             }}
           >
             {cell ? (
-              <div
-                draggable
-                onDragStart={() => { dragFrom.current = { row: r, col: c }; }}
-              >
-                <Item item={cell} />
-              </div>
+              isGenerator(cell) ? (
+                <Generator chain={cell.chain} onTap={() => onGeneratorTap({ row: r, col: c })} />
+              ) : (
+                <div
+                  draggable
+                  onDragStart={() => { dragFrom.current = { row: r, col: c }; }}
+                >
+                  <Item item={cell} />
+                </div>
+              )
             ) : null}
           </div>
         )),

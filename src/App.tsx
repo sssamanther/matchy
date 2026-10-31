@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useGame } from './hooks/useGame';
 import Board from './components/Board';
-import Source from './components/Source';
+
 import OrderPanel from './components/OrderPanel';
 import GardenLevelBar from './components/GardenLevelBar';
 import PlotSelect from './components/PlotSelect';
@@ -34,13 +34,8 @@ export default function App() {
       <div style={{ marginBottom: 8 }}>
         Plot {g.plot.id}: {g.plot.name} — stars {g.starsThisPlot}/{g.plot.starQuota}
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        {g.plot.sources.map((s, i) => (
-          <Source key={i} chain={s.chain} onTap={() => g.tapSource(i)} />
-        ))}
-      </div>
       <div style={{ position: 'relative' }}>
-        <Board board={g.board} nudge={g.nudge} hint={g.hint} onDrop={g.handleDrop} />
+        <Board board={g.board} nudge={g.nudge} hint={g.hint} onDrop={g.handleDrop} onGeneratorTap={g.tapGenerator} />
         <Sparkles pos={g.sparkle} />
       </div>
       <div style={{ marginTop: 12 }}>

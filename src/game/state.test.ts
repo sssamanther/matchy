@@ -91,9 +91,9 @@ describe('saving/restoring', () => {
     const loaded = loadGame();
     const s1 = createInitialState(loaded);
     expect(s1.board[2][3]?.chain).toBe('berry');
-    expect(s1.board[2][3]?.tier).toBe(2);
+    expect((s1.board[2][3] as any)?.tier).toBe(2);
     expect(s1.board[5][1]?.chain).toBe('mushroom');
-    expect(s1.board[5][1]?.tier).toBe(4);
+    expect((s1.board[5][1] as any)?.tier).toBe(4);
   });
 
   it('restores active orders and unlocked plots', () => {
@@ -176,5 +176,67 @@ describe('invalid save data', () => {
       },
     }));
     expect(loadGame()).toBeNull();
+  });
+});
+
+describe('generators', () => {
+  it('starting board has generators', () => {
+    const s = createInitialState();
+    const gens = s.board.flat().filter((c) => c && 'kind' in c && c.kind === 'generator');
+    expect(gens.length).toBeGreaterThan(0);
+  });
+
+  it('tap generator spawns adjacent item', () => {
+    const s = createInitialState();
+    // find a generator
+    let gpos: { row: number; col: number } | null = null;
+    outer: for (let r = 0; r < s.board.length; r++) for (let c = 0; c < s.board[r].length; c++) {
+      const cell = s.board[r][c];
+      if (cell && 'kind' in cell && cell.kind === 'generator') { gpos = { row: r, col: c }; break outer; }
+    }
+    expect(gpos).not.toBeNull();
+    const before = s.board.flat().filter((c) => c && !('kind' in c)).length;
+    const next = gameReducer(s, { type: 'TAP_GENERATOR', pos: gpos! });
+    const after = next.board.flat().filter((c) => c && !('kind' in c)).length;
+    expect(after).toBe(before + 1);
+  });
+
+  it('does not spawn when surrounded', () => {
+    const s = createInitialState();
+    // build a board with a generator surrounded
+    const b = s.board.map((r) => r.slice());
+    // clear a spot and place generator
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) b[r][c] = null;
+    b[3][3] = { id: 1, kind: 'generator', chain: 'flower' } as any;
+    for (const [dr, dc] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]] as const) {
+      b[3+dr][3+dc] = { id: 2, chain: 'frog', tier: 1 };
+    }
+    const state = { ...s, board: b };
+    const next = gameReducer(state, { type: 'TAP_GENERATOR', pos: { row: 3, col: 3 } });
+    expect(next.nudge).toBe(true);
+  });
+
+  it('migration: old save without generators loads', () => {
+    // old-style save: board has no generators
+    const s0 = createInitialState();
+    const b = s0.board.map((r) => r.slice());
+    // remove generators
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+      const cell = b[r][c];
+      if (cell && 'kind' in cell && cell.kind === 'generator') b[r][c] = null;
+    }
+    const saved = {
+      version: 1,
+      plotIndex: 0,
+      board: b,
+      orders: s0.orders,
+      progress: s0.progress,
+      unlockedPlots: s0.unlockedPlots,
+    };
+    saveGame(saved as any);
+    const loaded = loadGame();
+    expect(loaded).not.toBeNull();
+    const resumed = createInitialState(loaded);
+    expect(resumed.board).toBeDefined();
   });
 });

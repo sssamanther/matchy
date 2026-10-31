@@ -12,7 +12,7 @@ export function generateOrder(chain: ChainId = 'frog', tier: number = 1, count: 
 export function canFulfill(board: import('./types').Board, order: Order): boolean {
   let n = 0;
   for (const row of board) for (const cell of row) {
-    if (cell && cell.chain === order.chain && cell.tier === order.tier) n++;
+    if (cell && 'tier' in cell && cell.chain === order.chain && cell.tier === order.tier) n++;
   }
   return n >= order.count;
 }

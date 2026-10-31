@@ -16,7 +16,9 @@ function isBoard(v: unknown): v is PersistedGameState['board'] {
       if (cell === null) return true;
       if (!cell || typeof cell !== 'object') return false;
       const c = cell as Record<string, unknown>;
-      return typeof c.id === 'number' && typeof c.chain === 'string' && typeof c.tier === 'number';
+      if (typeof c.id !== 'number' || typeof c.chain !== 'string') return false;
+      if (c.kind === 'generator') return true;
+      return typeof c.tier === 'number';
     });
   });
 }

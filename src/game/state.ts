@@ -1,13 +1,16 @@
 import {
   createEmptyBoard,
   createItem,
+  createGenerator,
   mergeAt,
   spawnItem,
+  generatorSpawnCell,
 } from './board';
 import { PLOTS } from './plots';
 import { generateOrder } from './orders';
 import { initialProgress, type Progress } from './progress';
 import { CHAIN_TIER_COUNT } from './types';
+import type { ChainId } from './types';
 import type { Board, Order, Position, Plot } from './types';
 
 export const SAVE_VERSION = 1;
@@ -29,6 +32,7 @@ export interface GameState extends PersistedGameState {
 
 export type GameAction =
   | { type: 'TAP_SOURCE'; index: number }
+  | { type: 'TAP_GENERATOR'; pos: Position }
   | { type: 'DROP'; from: Position; to: Position }
   | { type: 'SERVE_ORDER'; orderId: number }
   | { type: 'NEXT_PLOT' }
@@ -41,9 +45,15 @@ export type GameAction =
 
 function initBoard(plot: Plot): Board {
   const b = createEmptyBoard();
+  // generators occupy cells from sources
+  for (const s of plot.sources) {
+    b[s.pos.row][s.pos.col] = createGenerator(s.chain);
+  }
   if (plot.startingItems) {
     for (const si of plot.startingItems) {
-      b[si.pos.row][si.pos.col] = createItem(si.chain, si.tier);
+      if (b[si.pos.row][si.pos.col] === null) {
+        b[si.pos.row][si.pos.col] = createItem(si.chain, si.tier);
+      }
     }
   }
   return b;
@@ -132,7 +142,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // fulfillability
       let count = 0;
       for (const row of state.board) for (const cell of row) {
-        if (cell && cell.chain === order.chain && cell.tier === order.tier) count++;
+        if (cell && 'tier' in cell && cell.chain === order.chain && cell.tier === order.tier) count++;
       }
       if (count < order.count) return state;
 
@@ -142,7 +152,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       outer: for (let r = 0; r < nextBoard.length; r++) {
         for (let c = 0; c < nextBoard[r].length; c++) {
           const cell = nextBoard[r][c];
-          if (cell && cell.chain === order.chain && cell.tier === order.tier) {
+          if (cell && 'tier' in cell && cell.chain === order.chain && cell.tier === order.tier) {
             nextBoard[r][c] = null;
             removed++;
             if (removed >= order.count) break outer;
@@ -203,6 +213,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         sparkle: null,
         nudge: false,
       };
+    }
+
+    case 'TAP_GENERATOR': {
+      const cell = state.board[action.pos.row]?.[action.pos.col];
+      if (!cell || !('kind' in cell) || (cell as { kind: string }).kind !== 'generator') return state;
+      const gen = cell as { kind: 'generator'; chain: ChainId };
+      const spawnPos = generatorSpawnCell(state.board, action.pos);
+      if (!spawnPos) {
+        return { ...state, nudge: true };
+      }
+      const nextBoard = state.board.map((row) => row.slice());
+      nextBoard[spawnPos.row][spawnPos.col] = createItem(gen.chain, 1);
+      return { ...state, board: nextBoard, nudge: false };
     }
 
     case 'RAIN_DROP': {
