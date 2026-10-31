@@ -5,6 +5,7 @@ import Source from './components/Source';
 import OrderPanel from './components/OrderPanel';
 import GardenLevelBar from './components/GardenLevelBar';
 import PlotSelect from './components/PlotSelect';
+import PlotComplete from './components/PlotComplete';
 
 export default function App() {
   const g = useGame();
@@ -42,11 +43,12 @@ export default function App() {
       </div>
       <GardenLevelBar stars={g.progress.stars} />
       {g.starsThisPlot >= g.plot.starQuota && (
-        <div style={{ marginTop: 12 }}>
-          <p>Plot complete! 🎉</p>
-          <button onClick={() => { g.nextPlot(); }}>Next plot</button>
-          <button onClick={() => setScreen('select')} style={{ marginLeft: 8 }}>Plot select</button>
-        </div>
+        <PlotComplete
+          plotName={g.plot.name}
+          stars={g.starsThisPlot}
+          onNext={() => { g.nextPlot(); }}
+          onBack={() => setScreen('select')}
+        />
       )}
       <button onClick={() => setScreen('select')} style={{ marginTop: 12 }}>Back to plots</button>
     </div>
