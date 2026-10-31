@@ -91,7 +91,7 @@ export function useGame() {
     board: state.board,
     orders: state.orders,
     progress: state.progress,
-    starsThisPlot: state.starsThisPlot,
+    starsThisPlot: state.progress.plotStars,
     nudge: state.nudge,
     hint: state.hint,
     sparkle: state.sparkle,

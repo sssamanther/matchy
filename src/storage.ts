@@ -7,15 +7,42 @@ interface SaveEnvelope {
   data: PersistedGameState;
 }
 
+function isBoard(v: unknown): v is PersistedGameState['board'] {
+  if (!Array.isArray(v)) return false;
+  if (v.length !== 7) return false;
+  return v.every((row) => {
+    if (!Array.isArray(row) || row.length !== 7) return false;
+    return row.every((cell) => {
+      if (cell === null) return true;
+      if (!cell || typeof cell !== 'object') return false;
+      const c = cell as Record<string, unknown>;
+      return typeof c.id === 'number' && typeof c.chain === 'string' && typeof c.tier === 'number';
+    });
+  });
+}
+
+function isOrders(v: unknown): v is PersistedGameState['orders'] {
+  if (!Array.isArray(v)) return false;
+  return v.every((o) => {
+    if (!o || typeof o !== 'object') return false;
+    const x = o as Record<string, unknown>;
+    return typeof x.id === 'number' && typeof x.chain === 'string' && typeof x.tier === 'number' && typeof x.count === 'number';
+  });
+}
+
 function isValidPersisted(v: unknown): v is PersistedGameState {
   if (!v || typeof v !== 'object') return false;
   const o = v as Record<string, unknown>;
   if (typeof o.plotIndex !== 'number') return false;
-  if (!Array.isArray(o.board)) return false;
-  if (!Array.isArray(o.orders)) return false;
+  if (!isBoard(o.board)) return false;
+  if (!isOrders(o.orders)) return false;
   if (!o.progress || typeof o.progress !== 'object') return false;
-  if (typeof o.starsThisPlot !== 'number') return false;
+  const p = o.progress as Record<string, unknown>;
+  if (typeof p.currentPlot !== 'number') return false;
+  if (typeof p.stars !== 'number') return false;
+  if (typeof p.plotStars !== 'number') return false;
   if (!Array.isArray(o.unlockedPlots)) return false;
+  if (!o.unlockedPlots.every((n) => typeof n === 'number')) return false;
   return true;
 }
 

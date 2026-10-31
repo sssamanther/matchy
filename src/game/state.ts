@@ -18,7 +18,6 @@ export interface PersistedGameState {
   board: Board;
   orders: Order[];
   progress: Progress;
-  starsThisPlot: number;
   unlockedPlots: number[];
 }
 
@@ -68,7 +67,6 @@ export function createInitialState(saved?: PersistedGameState | null): GameState
       board: saved.board,
       orders: saved.orders,
       progress: saved.progress,
-      starsThisPlot: saved.starsThisPlot,
       unlockedPlots: saved.unlockedPlots ?? [1],
       hint: null,
       sparkle: null,
@@ -82,7 +80,6 @@ export function createInitialState(saved?: PersistedGameState | null): GameState
     board: initBoard(plot),
     orders: initOrders(plot),
     progress: initialProgress(),
-    starsThisPlot: 0,
     unlockedPlots: [1],
     hint: null,
     sparkle: null,
@@ -97,7 +94,6 @@ function toPersisted(s: GameState): PersistedGameState {
     board: s.board,
     orders: s.orders,
     progress: s.progress,
-    starsThisPlot: s.starsThisPlot,
     unlockedPlots: s.unlockedPlots,
   };
 }
@@ -160,7 +156,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         1,
       );
 
-      const newStarsThisPlot = state.starsThisPlot + 1;
       const newProgress: Progress = {
         ...state.progress,
         stars: state.progress.stars + 1,
@@ -171,7 +166,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         board: nextBoard,
         orders: state.orders.map((o) => (o.id === action.orderId ? newOrder : o)),
-        starsThisPlot: newStarsThisPlot,
         progress: newProgress,
       };
     }
@@ -187,7 +181,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         plotIndex: state.plotIndex + 1,
         board: initBoard(next),
         orders: initOrders(next),
-        starsThisPlot: 0,
         unlockedPlots: unlocked,
         progress: { ...state.progress, currentPlot: next.id, plotStars: 0 },
         hint: null,
@@ -205,7 +198,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         plotIndex: action.index,
         board: initBoard(p),
         orders: initOrders(p),
-        starsThisPlot: 0,
         progress: { ...state.progress, currentPlot: p.id, plotStars: 0 },
         hint: null,
         sparkle: null,
