@@ -7,7 +7,7 @@ import {
   generatorSpawnCell,
 } from './board';
 import { PLOTS } from './plots';
-import { generateOrder, rewardFor } from './orders';
+import { generateOrder, rewardFor, migrateOrders } from './orders';
 import { initialProgress, type Progress } from './progress';
 import { regenerateEnergy } from './energy';
 import { ENERGY_CONFIG } from './energyConfig';
@@ -66,10 +66,10 @@ function initBoard(plot: Plot): Board {
   return b;
 }
 
-function initOrders(plot: Plot): Order[] {
+function initOrders(plot: Plot, plotIndex: number, completedOrders: number): Order[] {
   const chains = plot.sources.map((s) => s.chain);
   const out: Order[] = [];
-  const ctxBase = { chains, completedOrders: 0, existingOrders: out, board: createEmptyBoard() };
+  const ctxBase = { chains, completedOrders, plotIndex, existingOrders: out, board: createEmptyBoard() };
   for (let i = 0; i < 3; i++) {
     out.push(generateOrder({ ...ctxBase, existingOrders: [...out] }));
   }
@@ -82,7 +82,11 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       version: SAVE_VERSION,
       plotIndex: saved.plotIndex,
       board: saved.board,
-      orders: saved.orders,
+      orders: migrateOrders(
+      saved.orders,
+      saved.plotIndex,
+      (PLOTS[saved.plotIndex] ?? PLOTS[0]).sources.map((s) => s.chain),
+    ),
       progress: { ...saved.progress, completedOrders: saved.progress.completedOrders ?? 0 },
       unlockedPlots: saved.unlockedPlots ?? [1],
     ...regenerateEnergy(
@@ -100,7 +104,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     version: SAVE_VERSION,
     plotIndex: 0,
     board: initBoard(plot),
-    orders: initOrders(plot),
+    orders: initOrders(plot, 0, 0),
     progress: initialProgress(),
     unlockedPlots: [1],
     energy: ENERGY_CONFIG.startingEnergy,
@@ -180,6 +184,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const newOrder = generateOrder({
         chains,
         completedOrders: newCompleted,
+        plotIndex: state.plotIndex,
         existingOrders: state.orders.filter((o) => o.id !== action.orderId),
         board: nextBoard,
       });
@@ -209,7 +214,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         plotIndex: state.plotIndex + 1,
         board: initBoard(next),
-        orders: initOrders(next),
+        orders: initOrders(next, state.plotIndex + 1, state.progress.completedOrders),
         unlockedPlots: unlocked,
         progress: { ...state.progress, currentPlot: next.id, plotStars: 0 },
         hint: null,
@@ -226,7 +231,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         plotIndex: action.index,
         board: initBoard(p),
-        orders: initOrders(p),
+        orders: initOrders(p, action.index, state.progress.completedOrders),
         progress: { ...state.progress, currentPlot: p.id, plotStars: 0 },
         hint: null,
         sparkle: null,

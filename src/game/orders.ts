@@ -6,25 +6,39 @@ export function resetOrderIds(): void { nextOrderId = 1; }
 export interface OrderContext {
   chains: ChainId[];
   completedOrders: number;
+  plotIndex: number;
   existingOrders: Order[];
   board: Board;
 }
 
-// Configurable difficulty thresholds: completedOrders -> tier
-const TIER_THRESHOLDS: Array<{ min: number; tier: number }> = [
-  { min: 0, tier: 1 },
-  { min: 3, tier: 2 },
-  { min: 6, tier: 3 },
-  { min: 10, tier: 4 },
-  { min: 16, tier: 5 },
+// Plot-based minimum/maximum order tiers
+export const PLOT_TIER_RANGE: Record<number, { min: number; max: number }> = {
+  1: { min: 1, max: 2 },
+  2: { min: 2, max: 3 },
+  3: { min: 2, max: 4 },
+  4: { min: 3, max: 4 },
+  5: { min: 3, max: 5 },
+};
+
+export function plotTierRange(plotIndex: number): { min: number; max: number } {
+  return PLOT_TIER_RANGE[plotIndex + 1] ?? { min: 1, max: 2 };
+}
+
+// Configurable difficulty thresholds: completedOrders -> tier offset
+const TIER_THRESHOLDS: Array<{ min: number; tierOffset: number }> = [
+  { min: 0, tierOffset: 0 },
+  { min: 3, tierOffset: 1 },
+  { min: 8, tierOffset: 2 },
 ];
 
-export function getOrderTier(completedOrders: number): number {
-  let tier = 1;
+export function getOrderTier(completedOrders: number, plotIndex: number): number {
+  const range = plotTierRange(plotIndex);
+  let offset = 0;
   for (const t of TIER_THRESHOLDS) {
-    if (completedOrders >= t.min) tier = t.tier;
+    if (completedOrders >= t.min) offset = t.tierOffset;
   }
-  return Math.min(tier, 5);
+  const tier = Math.min(range.max, range.min + offset);
+  return Math.max(range.min, Math.min(tier, 5));
 }
 
 // Reward table per tier (base per item)
@@ -57,10 +71,22 @@ function chooseChain(chains: ChainId[], tier: number, existing: Order[]): ChainI
 }
 
 export function generateOrder(ctx: OrderContext): Order {
-  const tier = getOrderTier(ctx.completedOrders);
+  const tier = getOrderTier(ctx.completedOrders, ctx.plotIndex);
   const chain = chooseChain(ctx.chains, tier, ctx.existingOrders);
   const count = getOrderQuantity(tier, ctx.completedOrders);
   return { id: nextOrderId++, chain, tier, count };
+}
+
+export function migrateOrders(orders: Order[], plotIndex: number, chains: ChainId[]): Order[] {
+  const range = plotTierRange(plotIndex);
+  return orders.map((o) => {
+    if (o.tier >= range.min && o.tier <= range.max) return o;
+    // upgrade (or clamp) to minimum tier
+    const existing = orders.filter((x) => x.id !== o.id);
+    const tier = range.min;
+    const chain = chooseChain(chains, tier, existing);
+    return { id: nextOrderId++, chain, tier, count: o.count };
+  });
 }
 
 export function canFulfill(board: Board, order: Order): boolean {

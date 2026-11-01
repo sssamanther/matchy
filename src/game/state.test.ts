@@ -98,7 +98,7 @@ describe('saving/restoring', () => {
 
   it('restores active orders and unlocked plots', () => {
     const s0 = createInitialState();
-    const orders = [{ id: 99, chain: 'frog' as any, tier: 1, count: 2 }];
+    const orders = [{ id: 99, chain: 'frog' as any, tier: 2, count: 2 }];
     const saved = {
       version: s0.version,
       plotIndex: 1,
