@@ -1,4 +1,4 @@
-import type { Board, ChainId, Order } from './types';
+import type { Board, ChainId, Order, OrderRequirement } from './types';
 
 let nextOrderId = 1;
 export function resetOrderIds(): void { nextOrderId = 1; }
@@ -11,7 +11,6 @@ export interface OrderContext {
   board: Board;
 }
 
-// Plot-based minimum/maximum order tiers
 export const PLOT_TIER_RANGE: Record<number, { min: number; max: number }> = {
   1: { min: 1, max: 3 },
   2: { min: 3, max: 4 },
@@ -24,7 +23,6 @@ export function plotTierRange(plotIndex: number): { min: number; max: number } {
   return PLOT_TIER_RANGE[plotIndex + 1] ?? { min: 1, max: 2 };
 }
 
-// Configurable difficulty thresholds: completedOrders -> tier offset
 const TIER_THRESHOLDS: Array<{ min: number; tierOffset: number }> = [
   { min: 0, tierOffset: 0 },
   { min: 3, tierOffset: 1 },
@@ -41,7 +39,6 @@ export function getOrderTier(completedOrders: number, plotIndex: number): number
   return Math.max(range.min, Math.min(tier, 5));
 }
 
-// Reward table per tier (base per item)
 const REWARD_TABLE: Record<number, number> = {
   1: 1,
   2: 2,
@@ -51,83 +48,106 @@ const REWARD_TABLE: Record<number, number> = {
 };
 
 export function rewardFor(order: Order): number {
-  const base = REWARD_TABLE[order.tier] ?? order.tier;
-  return base * order.count;
+  let total = 0;
+  for (const r of order.requirements) {
+    const base = REWARD_TABLE[r.tier] ?? r.tier;
+    total += base * r.count;
+  }
+  return total;
 }
 
 function getOrderQuantity(tier: number, completedOrders: number): number {
-  // low tiers may request 2; higher tiers stay 1
   if (tier <= 2 && completedOrders % 3 === 0) return 2;
   return 1;
 }
 
 function chooseChain(chains: ChainId[], tier: number, existing: Order[]): ChainId {
   const available = chains.length ? chains : (['frog'] as ChainId[]);
-  // avoid same chain+tier duplicate if possible
-  const used = new Set(existing.map((o) => `${o.chain}:${o.tier}`));
+  const used = new Set(existing.flatMap((o) => o.requirements.map((r) => `${r.chain}:${r.tier}`)));
   const candidates = available.filter((c) => !used.has(`${c}:${tier}`));
   const pool = candidates.length ? candidates : available;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-export function generateOrder(ctx: OrderContext): Order {
-  const tier = getOrderTier(ctx.completedOrders, ctx.plotIndex);
-  const chain = chooseChain(ctx.chains, tier, ctx.existingOrders);
-  const count = getOrderQuantity(tier, ctx.completedOrders);
-  return { id: nextOrderId++, chain, tier, count };
+function makeRequirement(chains: ChainId[], tier: number, existing: Order[]): OrderRequirement {
+  const chain = chooseChain(chains, tier, existing);
+  return { chain, tier, count: getOrderQuantity(tier, 0) };
 }
 
-export function generateOrderSet(
-  chains: ChainId[],
-  plotIndex: number,
-  completedOrders: number,
-): Order[] {
+export function generateOrder(ctx: OrderContext): Order {
+  const tier = getOrderTier(ctx.completedOrders, ctx.plotIndex);
+  const req = makeRequirement(ctx.chains, tier, ctx.existingOrders);
+  return { id: nextOrderId++, requirements: [req] };
+}
+
+export function generateOrderSet(chains: ChainId[], plotIndex: number, completedOrders: number): Order[] {
   const range = plotTierRange(plotIndex);
   const min = range.min;
-  const max = Math.min(range.max, 5); // cap at supported chain tier
-  // difficulty mix: accessible, medium, challenging
+  const max = Math.min(range.max, 5);
   const tiers: number[] = [min];
   if (max > min) tiers.push(Math.min(min + 1, max));
   if (max > min + 1) tiers.push(max);
-  // pad to 3
   while (tiers.length < 3) tiers.push(max);
+
   const out: Order[] = [];
   for (const tier of tiers) {
-    const chain = chooseChain(chains, tier, out);
-    const count = getOrderQuantity(tier, completedOrders);
-    out.push({ id: nextOrderId++, chain, tier, count });
-  }
-  return out;
-}
-
-export function migrateOrders(orders: Order[], plotIndex: number, chains: ChainId[]): Order[] {
-  const range = plotTierRange(plotIndex);
-  const result: Order[] = [];
-  for (const o of orders) {
-    const isOutOfRange = o.tier < range.min || o.tier > range.max;
-    const isDuplicate = result.some((r) => r.chain === o.chain && r.tier === o.tier && r.count === o.count);
-    if (isOutOfRange || isDuplicate) {
-      const replacement = generateOrder({
-        chains,
-        completedOrders: 0,
-        plotIndex,
-        existingOrders: result,
-        board: [] as any,
-      });
-      // ensure tier within range
-      replacement.tier = Math.max(range.min, Math.min(replacement.tier, range.max));
-      result.push(replacement);
-    } else {
-      result.push(o);
+    // occasionally multi-item for level 3+
+    const multi = completedOrders >= 3 && Math.random() < 0.3;
+    const reqs: OrderRequirement[] = [];
+    const r1 = makeRequirement(chains, tier, out);
+    reqs.push(r1);
+    if (multi && chains.length > 1) {
+      const t2 = Math.max(range.min, tier - 1);
+      const r2 = makeRequirement(chains, t2, out);
+      if (r2.chain !== r1.chain || r2.tier !== r1.tier) reqs.push(r2);
     }
+    // dedup: if identical to existing, adjust tier
+    out.push({ id: nextOrderId++, requirements: reqs });
   }
-  return result;
+  // dedup identical orders
+  const seen = new Set<string>();
+  return out.map((o) => {
+    const key = o.requirements.map((r) => `${r.chain}:${r.tier}:${r.count}`).join('|');
+    if (seen.has(key)) {
+      // bump tier of first req
+      const nr = o.requirements.map((r, i) => i === 0 ? { ...r, tier: Math.min(5, r.tier + 1) } : r);
+      seen.add(nr.map((r) => `${r.chain}:${r.tier}:${r.count}`).join('|'));
+      return { ...o, requirements: nr };
+    }
+    seen.add(key);
+    return o;
+  });
 }
 
 export function canFulfill(board: Board, order: Order): boolean {
+  // check if all requirements can be met with current inventory (no double count across reqs? each req distinct type)
+  for (const r of order.requirements) {
+    let n = 0;
+    for (const row of board) for (const cell of row) {
+      if (cell && 'tier' in cell && cell.chain === r.chain && cell.tier === r.tier) n++;
+    }
+    if (n < r.count) return false;
+  }
+  return true;
+}
+
+export function countAvailable(board: Board, req: OrderRequirement): number {
   let n = 0;
   for (const row of board) for (const cell of row) {
-    if (cell && 'tier' in cell && cell.chain === order.chain && cell.tier === order.tier) n++;
+    if (cell && 'tier' in cell && cell.chain === req.chain && cell.tier === req.tier) n++;
   }
-  return n >= order.count;
+  return n;
+}
+
+export function migrateOrders(orders: Order[]): Order[] {
+  // convert legacy single-item orders (if any) already in new format; ensure requirements
+  return orders.map((o) => {
+    if (o.requirements && Array.isArray(o.requirements)) return o;
+    // legacy fallback
+    const legacy = o as any;
+    if (legacy.chain && legacy.tier) {
+      return { id: nextOrderId++, requirements: [{ chain: legacy.chain, tier: legacy.tier, count: legacy.count ?? 1 }] };
+    }
+    return o;
+  });
 }

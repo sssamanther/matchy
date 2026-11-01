@@ -27,7 +27,7 @@ describe('order completion', () => {
     b[0][1] = { id: 2, chain: 'frog', tier: 1 };
     const state = { ...s0, board: b };
     const orderId = state.orders[0].id;
-    const orderState = { ...state, orders: [{ id: orderId, chain: 'frog' as any, tier: 1, count: 1 }] };
+    const orderState = { ...state, orders: [{ id: orderId, requirements: [{ chain: 'frog' as any, tier: 1, count: 1 }] }] };
     const next = gameReducer(orderState, { type: 'SERVE_ORDER', orderId });
     expect(next.progress.plotStars).toBe(1);
     expect(next.progress.stars).toBe(1);
@@ -37,7 +37,7 @@ describe('order completion', () => {
   it('does not award star if not fulfillable', () => {
     const s0 = createInitialState();
     const orderId = s0.orders[0].id;
-    const orderState = { ...s0, orders: [{ id: orderId, chain: 'frog' as any, tier: 9, count: 1 }] };
+    const orderState = { ...s0, orders: [{ id: orderId, requirements: [{ chain: 'frog' as any, tier: 9, count: 1 }] }] };
     const next = gameReducer(orderState, { type: 'SERVE_ORDER', orderId });
     expect(next.progress.plotStars).toBe(0);
     expect(next.progress.stars).toBe(0);
@@ -49,7 +49,7 @@ describe('order completion', () => {
     b[0][0] = { id: 1, chain: 'frog', tier: 1 };
     const state = { ...s0, board: b };
     const orderId = state.orders[0].id;
-    const orderState = { ...state, orders: [{ id: orderId, chain: 'frog' as any, tier: 1, count: 1 }] };
+    const orderState = { ...state, orders: [{ id: orderId, requirements: [{ chain: 'frog' as any, tier: 1, count: 1 }] }] };
     const next1 = gameReducer(orderState, { type: 'SERVE_ORDER', orderId });
     const next2 = gameReducer(next1, { type: 'SERVE_ORDER', orderId });
     // second attempt: order replaced; old orderId no longer exists -> no extra star
@@ -98,7 +98,7 @@ describe('saving/restoring', () => {
 
   it('restores active orders and unlocked plots', () => {
     const s0 = createInitialState();
-    const orders = [{ id: 99, chain: 'frog' as any, tier: 3, count: 2 }];
+    const orders = [{ id: 99, requirements: [{ chain: 'frog' as any, tier: 3, count: 2 }] }];
     const saved = {
       version: s0.version,
       plotIndex: 1,
@@ -138,7 +138,7 @@ describe('refresh/resume rewards', () => {
     b[0][0] = { id: 1, chain: 'frog', tier: 1 };
     const state = { ...s0, board: b };
     const orderId = state.orders[0].id;
-    const orderState = { ...state, orders: [{ id: orderId, chain: 'frog' as any, tier: 1, count: 1 }] };
+    const orderState = { ...state, orders: [{ id: orderId, requirements: [{ chain: 'frog' as any, tier: 1, count: 1 }] }] };
     const next = gameReducer(orderState, { type: 'SERVE_ORDER', orderId });
     saveGame({
       version: next.version,

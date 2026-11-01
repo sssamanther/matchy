@@ -9,7 +9,7 @@ import {
 import { PLOTS } from './plots';
 import { RESTORATION_TASKS, isTaskAvailable } from './restoration';
 import { computeUnlockedFeatures } from './garden';
-import { generateOrder, generateOrderSet, rewardFor, migrateOrders } from './orders';
+import { generateOrder, generateOrderSet, rewardFor, migrateOrders, canFulfill } from './orders';
 import { initialProgress, levelFromXp, type Progress } from './progress';
 import { regenerateEnergy } from './energy';
 import { ENERGY_CONFIG } from './energyConfig';
@@ -34,6 +34,7 @@ export interface PersistedGameState {
   unlockedChains?: ChainId[];
   pendingGenerators?: ChainId[];
   gardenUnlocks?: string[];
+  selectedGoalId?: string | null;
 }
 
 export interface GameState extends PersistedGameState {
@@ -49,6 +50,7 @@ export interface GameState extends PersistedGameState {
   unlockedChains: ChainId[];
   pendingGenerators: ChainId[];
   gardenUnlocks: string[];
+  selectedGoalId: string | null;
 }
 
 export type GameAction =
@@ -57,6 +59,7 @@ export type GameAction =
   | { type: 'REGENERATE'; now: number }
   | { type: 'RESET' }
   | { type: 'RESTORE_TASK'; taskId: string }
+  | { type: 'SELECT_GOAL'; goalId: string | null }
   | { type: 'DROP'; from: Position; to: Position }
   | { type: 'SERVE_ORDER'; orderId: number }
   | { type: 'NEXT_PLOT' }
@@ -116,8 +119,7 @@ function initBoard(plot: Plot): Board {
   return b;
 }
 
-function initOrders(plot: Plot, plotIndex: number, completedOrders: number): Order[] {
-  const chains = plot.sources.map((s) => s.chain);
+function initOrders(chains: ChainId[], plotIndex: number, completedOrders: number): Order[] {
   return generateOrderSet(chains, plotIndex, completedOrders);
 }
 
@@ -127,11 +129,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       version: SAVE_VERSION,
       plotIndex: saved.plotIndex,
       board: saved.board,
-      orders: migrateOrders(
-      saved.orders,
-      saved.plotIndex,
-      (PLOTS[saved.plotIndex] ?? PLOTS[0]).sources.map((s) => s.chain),
-    ),
+      orders: migrateOrders(saved.orders),
       progress: { ...saved.progress, completedOrders: saved.progress.completedOrders ?? 0 },
       unlockedPlots: saved.unlockedPlots ?? [1],
     ...regenerateEnergy(
@@ -146,6 +144,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     unlockedChains: saved.unlockedChains ?? (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
     pendingGenerators: saved.pendingGenerators ?? [],
     gardenUnlocks: computeUnlockedFeatures((saved.completedRestoration ?? []).length, saved.gardenUnlocks ?? []),
+    selectedGoalId: saved.selectedGoalId ?? null,
     hint: null,
     sparkle: null,
     nudge: false,
@@ -156,7 +155,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     version: SAVE_VERSION,
     plotIndex: 0,
     board: initBoard(plot),
-    orders: initOrders(plot, 0, 0),
+    orders: initOrders(['flower', 'frog'], 0, 0),
     progress: initialProgress(),
     unlockedPlots: [1],
     energy: ENERGY_CONFIG.startingEnergy,
@@ -168,6 +167,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     unlockedChains: (['flower', 'frog'] as ChainId[]),
     pendingGenerators: [],
     gardenUnlocks: [],
+    selectedGoalId: null,
     hint: null,
     sparkle: null,
     nudge: false,
@@ -190,6 +190,7 @@ function toPersisted(s: GameState): PersistedGameState {
     completedRestoration: s.completedRestoration,
     unlockedChains: s.unlockedChains,
     gardenUnlocks: s.gardenUnlocks,
+    selectedGoalId: s.selectedGoalId,
   };
 }
 
@@ -225,29 +226,35 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const order = state.orders.find((o) => o.id === action.orderId);
       if (!order) return state;
       // fulfillability
-      let count = 0;
-      for (const row of state.board) for (const cell of row) {
-        if (cell && 'tier' in cell && cell.chain === order.chain && cell.tier === order.tier) count++;
-      }
-      if (count < order.count) return state;
+      // fulfillability
+      if (!canFulfill(state.board, order)) return state;
 
-      // remove items
+      // aggregate required counts
+      const reqMap = new Map<string, number>();
+      for (const r of order.requirements) {
+        const key = `${r.chain}:${r.tier}`;
+        reqMap.set(key, (reqMap.get(key) ?? 0) + r.count);
+      }
       const nextBoard = state.board.map((row) => row.slice());
-      let removed = 0;
-      outer: for (let r = 0; r < nextBoard.length; r++) {
-        for (let c = 0; c < nextBoard[r].length; c++) {
-          const cell = nextBoard[r][c];
-          if (cell && 'tier' in cell && cell.chain === order.chain && cell.tier === order.tier) {
-            nextBoard[r][c] = null;
-            removed++;
-            if (removed >= order.count) break outer;
+      for (const [key, needed] of reqMap) {
+        const [chain, tierStr] = key.split(':');
+        const tier = Number(tierStr);
+        let removed = 0;
+        outer: for (let r = 0; r < nextBoard.length; r++) {
+          for (let c = 0; c < nextBoard[r].length; c++) {
+            const cell = nextBoard[r][c];
+            if (cell && 'tier' in cell && cell.chain === chain && cell.tier === tier) {
+              nextBoard[r][c] = null;
+              removed++;
+              if (removed >= needed) break outer;
+            }
           }
         }
       }
 
       const reward = rewardFor(order);
       const newCompleted = state.progress.completedOrders + 1;
-      const chains = (PLOTS[state.plotIndex]?.sources ?? []).map((s) => s.chain);
+      const chains = state.unlockedChains;
       const newOrder = generateOrder({
         chains,
         completedOrders: newCompleted,
@@ -289,7 +296,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         plotIndex: state.plotIndex + 1,
         board: initBoard(next),
-        orders: initOrders(next, state.plotIndex + 1, state.progress.completedOrders),
+        orders: initOrders(state.unlockedChains, state.plotIndex + 1, state.progress.completedOrders),
         unlockedPlots: unlocked,
         progress: { ...state.progress, currentPlot: next.id, plotStars: 0 },
         hint: null,
@@ -306,7 +313,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         plotIndex: action.index,
         board: initBoard(p),
-        orders: initOrders(p, action.index, state.progress.completedOrders),
+        orders: initOrders(state.unlockedChains, action.index, state.progress.completedOrders),
         progress: { ...state.progress, currentPlot: p.id, plotStars: 0 },
         hint: null,
         sparkle: null,
@@ -342,6 +349,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, board: res.board };
     }
 
+    case 'SELECT_GOAL':
+      return { ...state, selectedGoalId: action.goalId };
+
     case 'SET_HINT':
       return { ...state, hint: action.hint };
 
@@ -366,6 +376,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         gardenUnlocks: computeUnlockedFeatures(newCompleted.length, state.gardenUnlocks),
         xp: state.xp + task.cost,
         level: newLevel,
+        selectedGoalId: state.selectedGoalId === task.id ? null : state.selectedGoalId,
       };
       if (newLevel > state.level) return applyUnlocks(base, newLevel);
       return base;

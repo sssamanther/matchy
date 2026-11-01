@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { CHAIN_EMOJI, CHAIN_TIER_LABELS } from '../game/types';
-import type { Board, Order } from '../game/types';
-import { canFulfill, rewardFor } from '../game/orders';
+import type { Board, Order, OrderRequirement } from '../game/types';
+import { canFulfill, countAvailable, rewardFor } from '../game/orders';
 
-function collected(board: Board, order: Order): number {
-  let n = 0;
-  for (const row of board) for (const cell of row) {
-    if (cell && 'tier' in cell && cell.chain === order.chain && cell.tier === order.tier) n++;
-  }
-  return n;
+function reqProgress(board: Board, req: OrderRequirement): number {
+  return countAvailable(board, req);
 }
 
 export default function OrderPanel({
@@ -27,7 +23,7 @@ export default function OrderPanel({
     const prev = prevIdsRef.current;
     const changed = orders.some((o, i) => prev[i] !== o.id);
     if (changed) {
-      setReward('+1 ⭐');
+      setReward(`+${rewardFor(orders[0])} ⭐`); // approximate; rewards vary
       const t = setTimeout(() => setReward(null), 1200);
       prevIdsRef.current = orders.map((o) => o.id);
       return () => clearTimeout(t);
@@ -38,72 +34,50 @@ export default function OrderPanel({
   return (
     <div style={{ position: 'relative' }}>
       {reward && (
-        <div
-          style={{
-            position: 'absolute',
-            top: -24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            color: '#2e7d32',
-            fontWeight: 'bold',
-            animation: 'pop 0.6s ease',
-          }}
-        >
+        <div style={{ position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)', color: '#2e7d32', fontWeight: 'bold', animation: 'pop 0.6s ease', fontSize: 12 }}>
           {reward}
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 6 }}>
         {orders.map((o) => {
-          const have = collected(board, o);
-          const ready = have >= o.count;
+          const ready = canFulfill(board, o);
           return (
             <div
               key={o.id}
               style={{
-                flex: '1 1 140px',
-                minWidth: 140,
-                padding: 8,
-                borderRadius: 12,
+                padding: 6,
+                borderRadius: 8,
                 border: ready ? '2px solid #4caf50' : '1px solid #ccc',
                 background: ready ? '#e8f5e9' : '#fff',
-                transition: 'background 0.2s, border 0.2s',
+                fontSize: 12,
               }}
             >
-              <div style={{ fontSize: 28, textAlign: 'center' }}>
-                {CHAIN_EMOJI[o.chain]}
-              </div>
-              <div style={{ textAlign: 'center', fontSize: 12, opacity: 0.7 }}>
-                {CHAIN_TIER_LABELS[o.chain][o.tier - 1]} (tier {o.tier})
-              </div>
-              <div style={{ textAlign: 'center', marginTop: 4 }}>
-                Need: {o.count}
-              </div>
-              <div style={{ textAlign: 'center', fontSize: 12 }}>
-                {have}/{o.count} available
-              </div>
-              <div style={{ textAlign: 'center', fontSize: 12, color: '#f9a825' }}>
-                Reward: +{rewardFor(o)} ⭐
-              </div>
-              {ready && (
-                <div style={{ textAlign: 'center', color: '#2e7d32', fontWeight: 'bold' }}>
-                  Ready! ✓
-                </div>
-              )}
+              {o.requirements.map((r, i) => {
+                const have = reqProgress(board, r);
+                return (
+                  <div key={i}>
+                    {CHAIN_EMOJI[r.chain]} {CHAIN_TIER_LABELS[r.chain][r.tier - 1]} · T{r.tier} — {have}/{r.count}
+                  </div>
+                );
+              })}
+              <div style={{ color: '#f9a825' }}>⭐ +{rewardFor(o)}</div>
+              {ready && <div style={{ color: '#2e7d32', fontWeight: 'bold' }}>Ready! ✓</div>}
               <button
-                disabled={!ready || !canFulfill(board, o)}
+                disabled={!ready}
                 onClick={() => onServe(o.id)}
                 style={{
                   width: '100%',
-                  marginTop: 8,
-                  padding: 6,
-                  borderRadius: 8,
+                  marginTop: 4,
+                  padding: 4,
+                  borderRadius: 6,
                   border: 'none',
                   background: ready ? '#4caf50' : '#ddd',
                   color: ready ? '#fff' : '#888',
                   cursor: ready ? 'pointer' : 'not-allowed',
+                  fontSize: 12,
                 }}
               >
-                Complete Order
+                Complete
               </button>
             </div>
           );

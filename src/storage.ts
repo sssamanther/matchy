@@ -28,7 +28,13 @@ function isOrders(v: unknown): v is PersistedGameState['orders'] {
   return v.every((o) => {
     if (!o || typeof o !== 'object') return false;
     const x = o as Record<string, unknown>;
-    return typeof x.id === 'number' && typeof x.chain === 'string' && typeof x.tier === 'number' && typeof x.count === 'number';
+    if (typeof x.id !== 'number') return false;
+    if (!Array.isArray(x.requirements)) return false;
+    return (x.requirements as unknown[]).every((r) => {
+      if (!r || typeof r !== 'object') return false;
+      const rr = r as Record<string, unknown>;
+      return typeof rr.chain === 'string' && typeof rr.tier === 'number' && typeof rr.count === 'number';
+    });
   });
 }
 

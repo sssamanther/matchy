@@ -68,11 +68,15 @@ export interface Source {
   chain: ChainId;
 }
 
-export interface Order {
-  id: number;
+export interface OrderRequirement {
   chain: ChainId;
   tier: number;
   count: number;
+}
+
+export interface Order {
+  id: number;
+  requirements: OrderRequirement[];
 }
 
 export interface Plot {

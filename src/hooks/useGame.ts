@@ -93,6 +93,11 @@ export function useGame() {
     bump();
   }, [bump]);
 
+  const selectGoal = useCallback((goalId: string | null) => {
+    dispatch({ type: 'SELECT_GOAL', goalId });
+    bump();
+  }, [bump]);
+
   const resetGame = useCallback(() => {
     if (typeof window !== 'undefined' && !window.confirm('Reset all progress and start fresh?')) return;
     clearSave();
@@ -126,6 +131,8 @@ export function useGame() {
     level: state.level,
     completedRestoration: state.completedRestoration,
     gardenUnlocks: state.gardenUnlocks,
+    selectedGoalId: state.selectedGoalId,
+    selectGoal,
     gardenFeatures: GARDEN_FEATURES,
     restorationTasks: RESTORATION_TASKS,
     isTaskAvailable,
