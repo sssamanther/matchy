@@ -10,7 +10,7 @@ import { PLOTS } from './plots';
 import { RESTORATION_TASKS, isTaskAvailable } from './restoration';
 import { computeUnlockedFeatures } from './garden';
 import { generateOrder, generateOrderSet, rewardFor, migrateOrders } from './orders';
-import { initialProgress, type Progress } from './progress';
+import { initialProgress, levelFromXp, type Progress } from './progress';
 import { regenerateEnergy } from './energy';
 import { ENERGY_CONFIG } from './energyConfig';
 import { CHAIN_TIER_COUNT } from './types';
@@ -106,7 +106,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     ),
     starBalance: saved.starBalance ?? saved.progress?.stars ?? 0,
     xp: saved.xp ?? 0,
-    level: saved.level ?? 0,
+    level: saved.level && saved.level > 0 ? saved.level : levelFromXp(saved.xp ?? 0),
     completedRestoration: saved.completedRestoration ?? [],
     unlockedChains: saved.unlockedChains ?? (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
     gardenUnlocks: computeUnlockedFeatures((saved.completedRestoration ?? []).length, saved.gardenUnlocks ?? []),
@@ -127,7 +127,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     energyUpdatedAt: now,
     starBalance: 0,
     xp: 0,
-    level: 0,
+    level: levelFromXp(0),
     completedRestoration: [],
     unlockedChains: (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
     gardenUnlocks: [],
@@ -233,6 +233,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         progress: newProgress,
         starBalance: state.starBalance + reward,
         xp: state.xp + reward,
+        level: levelFromXp(state.xp + reward),
       };
     }
 
@@ -321,6 +322,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         completedRestoration: newCompleted,
         gardenUnlocks: computeUnlockedFeatures(newCompleted.length, state.gardenUnlocks),
         xp: state.xp + task.cost,
+        level: levelFromXp(state.xp + task.cost),
       };
     }
 

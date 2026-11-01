@@ -79,7 +79,7 @@ export default function OrderPanel({
                 Need: {o.count}
               </div>
               <div style={{ textAlign: 'center', fontSize: 12 }}>
-                {have}/{o.count} collected
+                {have}/{o.count} available
               </div>
               <div style={{ textAlign: 'center', fontSize: 12, color: '#f9a825' }}>
                 Reward: +{rewardFor(o)} ⭐

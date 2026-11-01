@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGame } from './hooks/useGame';
+import { xpForNextLevel as xpProgress } from './game/progress';
 import Board from './components/Board';
 import OrderPanel from './components/OrderPanel';
 
@@ -34,6 +35,9 @@ export default function App() {
       <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} />
       <div style={{ marginBottom: 8, fontWeight: 'bold' }}>⭐ Stars: {g.starBalance}</div>
       <div style={{ marginBottom: 8 }}>XP: {g.xp} (Level {g.level})</div>
+      <div style={{ height: 6, background: '#eee', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ width: `${xpProgress(g.xp).pct}%`, height: '100%', background: '#90caf9' }} />
+      </div>
       {import.meta.env.DEV && (
         <div style={{ marginBottom: 8, fontSize: 12 }}>
           <label style={{ display: 'block' }}>
