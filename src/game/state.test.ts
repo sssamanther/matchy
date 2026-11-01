@@ -205,12 +205,10 @@ describe('generators', () => {
     const s = createInitialState();
     // build a board with a generator surrounded
     const b = s.board.map((r) => r.slice());
-    // clear a spot and place generator
-    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) b[r][c] = null;
-    b[3][3] = { id: 1, kind: 'generator', chain: 'flower' } as any;
-    for (const [dr, dc] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]] as const) {
-      b[3+dr][3+dc] = { id: 2, chain: 'frog', tier: 1 };
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+      b[r][c] = { id: 2, chain: 'frog', tier: 1 };
     }
+    b[3][3] = { id: 1, kind: 'generator', chain: 'flower' } as any;
     const state = { ...s, board: b };
     const next = gameReducer(state, { type: 'TAP_GENERATOR', pos: { row: 3, col: 3 } });
     expect(next.nudge).toBe(true);
@@ -256,11 +254,10 @@ describe('energy', () => {
   it('failed spawn (surrounded) consumes no energy', () => {
     const s = createInitialState();
     const b = s.board.map((r) => r.slice());
-    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) b[r][c] = null;
-    b[3][3] = { id: 1, kind: 'generator', chain: 'flower' } as any;
-    for (const [dr, dc] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]] as const) {
-      b[3+dr][3+dc] = { id: 2, chain: 'frog', tier: 1 };
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+      b[r][c] = { id: 2, chain: 'frog', tier: 1 };
     }
+    b[3][3] = { id: 1, kind: 'generator', chain: 'flower' } as any;
     const state = { ...s, board: b, energy: 5 };
     const next = gameReducer(state, { type: 'TAP_GENERATOR', pos: { row: 3, col: 3 }, unlimited: false });
     expect(next.energy).toBe(5);

@@ -18,6 +18,7 @@ export default function Board({
   onGeneratorTap: (pos: Position) => void;
 }) {
   const dragFrom = useRef<Position | null>(null);
+  const dropHandled = useRef(false);
 
   return (
     <div
@@ -39,7 +40,8 @@ export default function Board({
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
-              if (dragFrom.current) {
+              if (dragFrom.current && !dropHandled.current) {
+                dropHandled.current = true;
                 onDrop(dragFrom.current, { row: r, col: c });
                 dragFrom.current = null;
               }
@@ -64,7 +66,7 @@ export default function Board({
               ) : (
                 <div
                   draggable
-                  onDragStart={() => { dragFrom.current = { row: r, col: c }; }}
+                  onDragStart={() => { dragFrom.current = { row: r, col: c }; dropHandled.current = false; }}
                 >
                   <Item item={cell} />
                 </div>

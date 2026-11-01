@@ -151,11 +151,11 @@ describe('generators', () => {
     expect(pos).not.toBeNull();
   });
 
-  it('returns null when surrounded', () => {
+  it('returns null when no empty cells anywhere', () => {
     const board = createEmptyBoard();
     board[1][1] = createGenerator('flower');
-    for (const [dr, dc] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]] as const) {
-      board[1+dr][1+dc] = { id: 999, chain: 'frog', tier: 1 };
+    for (let r = 0; r < GRID_SIZE; r++) for (let c = 0; c < GRID_SIZE; c++) {
+      if (board[r][c] === null) board[r][c] = { id: 999, chain: 'frog', tier: 1 };
     }
     expect(generatorSpawnCell(board, { row: 1, col: 1 })).toBeNull();
   });

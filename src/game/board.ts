@@ -238,13 +238,27 @@ const NEIGHBOR_OFFSETS: Array<[number, number]> = [
 ];
 
 export function generatorSpawnCell(board: Board, pos: Position): Position | null {
+  // 1. adjacent empty (deterministic order)
   for (const [dr, dc] of NEIGHBOR_OFFSETS) {
     const r = pos.row + dr;
     const c = pos.col + dc;
     if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) continue;
     if (board[r][c] === null) return { row: r, col: c };
   }
-  return null;
+  // 2. nearest empty elsewhere by Manhattan distance, tie-break row-major
+  let best: Position | null = null;
+  let bestDist = Infinity;
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (board[r][c] !== null) continue;
+      const dist = Math.abs(r - pos.row) + Math.abs(c - pos.col);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { row: r, col: c };
+      }
+    }
+  }
+  return best;
 }
 
 // ---------------------------------------------------------------------------
