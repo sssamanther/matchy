@@ -47,6 +47,20 @@ npm run build
 npm test
 ```
 
+## Android development (Capacitor)
+
+Prerequisites: Node.js, Android Studio, Android SDK, JDK 21.
+
+1. Install deps: `npm install`
+2. Build web: `npm run build`
+3. Sync: `npm run android:sync`
+4. Open Android Studio: `npm run android:open`
+5. Select emulator "Medium Phone API 37.0" and run.
+
+Rebuild after changes: `npm run android:sync`.
+
+Troubleshooting: set JAVA_HOME to JDK 21, ANDROID_HOME to SDK.
+
 ## Mobile input audit (planning only)
 
 Current board interactions rely on native HTML drag-and-drop in `src/components/Board.tsx` (draggable items + cell onDrop). Generators use click/tap buttons.

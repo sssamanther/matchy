@@ -5,3 +5,8 @@ dist/
 *.mp4
 
 *.exe
+android/app/build/
+android/.gradle/
+android/local.properties
+*.apk
+*.aab
