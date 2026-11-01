@@ -198,12 +198,11 @@ export function mergeAt(board: Board, from: Position, to: Position): MergeResult
 
   // For a normal merge-2, only consume the two dragged items.
   // Merge-5 bonus consumes the whole connected group when >=5 are involved.
-  let consumedPositions: Position[];
-  if (totalConsumed >= 5) {
+  const MERGE5_ENABLED = false;
+  let consumedPositions: Position[] = [from, to];
+  if (MERGE5_ENABLED && totalConsumed >= 5) {
     consumedPositions = [...component];
     if (!fromInComponent) consumedPositions.push(from);
-  } else {
-    consumedPositions = [from, to];
   }
 
   // Clear consumed cells.
@@ -212,7 +211,8 @@ export function mergeAt(board: Board, from: Position, to: Position): MergeResult
   const newTier = itemFrom.tier + 1;
   const spawned: Position[] = [];
 
-  if (totalConsumed >= 5) {
+  // Temporarily disable merge-5 / connected-group bonus.
+  if (MERGE5_ENABLED && totalConsumed >= 5) {
     // Merge-5 bonus: 2 next-tier items.
     const slots = consumedPositions.slice(0, 2);
     for (const p of slots) {
@@ -224,7 +224,7 @@ export function mergeAt(board: Board, from: Position, to: Position): MergeResult
     spawned.push({ row: to.row, col: to.col });
   }
 
-  return { board: next, kind: 'merge', spawned, consumed: totalConsumed };
+  return { board: next, kind: 'merge', spawned, consumed: consumedPositions.length };
 }
 
 // ---------------------------------------------------------------------------

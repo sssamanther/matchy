@@ -13,6 +13,7 @@ import {
 } from './board';
 import { isGenerator } from './types';
 import { GRID_SIZE } from './types';
+import type { Board } from './types';
 
 beforeEach(() => {
   resetItemIds();
@@ -64,8 +65,9 @@ describe('mergeAt', () => {
     // drag sixth? we only have 5; drag one onto another within cluster
     const res = mergeAt(board, { row: 0, col: 0 }, { row: 0, col: 1 });
     expect(res.kind).toBe('merge');
-    expect(res.spawned.length).toBe(2);
-    expect(res.consumed).toBe(5);
+    // merge-5 temporarily disabled: only one item spawns
+    expect(res.spawned.length).toBe(1);
+    expect(res.consumed).toBe(2);
   });
 });
 
@@ -127,6 +129,25 @@ describe('merge-2 regression', () => {
     expect(res.kind).toBe('none');
     expect(res.board[0][0]?.id).toBe(1);
   });
+});
+
+describe('strict merge-2 regression', () => {
+  function makeRow(n: number): Board {
+    const b = createEmptyBoard();
+    for (let c = 0; c < n; c++) b[0][c] = { id: c + 1, chain: 'frog', tier: 1 };
+    return b;
+  }
+  for (const n of [4, 5, 6]) {
+    it(`merging one pair among ${n} identical leaves the rest`, () => {
+      const board = makeRow(n);
+      const res = mergeAt(board, { row: 0, col: 0 }, { row: 0, col: 1 });
+      expect(res.kind).toBe('merge');
+      const tier2 = res.board.flat().filter((c) => c && 'tier' in c && c.tier === 2).length;
+      const tier1 = res.board.flat().filter((c) => c && 'tier' in c && c.tier === 1).length;
+      expect(tier2).toBe(1);
+      expect(tier1).toBe(n - 2);
+    });
+  }
 });
 
 describe('emptyCells', () => {
