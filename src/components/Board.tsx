@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import Item from './Item';
 import Generator from './Generator';
 import { isGenerator } from '../game/types';
@@ -18,7 +18,23 @@ export default function Board({
   onGeneratorTap: (pos: Position) => void;
 }) {
   const dragFrom = useRef<Position | null>(null);
-  const dropHandled = useRef(false);
+  const [hover, setHover] = useState<Position | null>(null);
+
+  const clearDrag = () => {
+    dragFrom.current = null;
+    setHover(null);
+  };
+
+  const cellAt = (x: number, y: number): Position | null => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el) return null;
+    const cell = el.closest('[data-row]') as HTMLElement | null;
+    if (!cell) return null;
+    const r = Number(cell.dataset.row);
+    const c = Number(cell.dataset.col);
+    if (Number.isNaN(r) || Number.isNaN(c)) return null;
+    return { row: r, col: c };
+  };
 
   return (
     <div
@@ -31,49 +47,67 @@ export default function Board({
         borderRadius: 12,
         transform: nudge ? 'translateX(4px)' : 'none',
         transition: 'transform 0.1s',
+        touchAction: 'none',
+        userSelect: 'none',
       }}
     >
       {board.map((row, r) =>
-        row.map((cell, c) => (
-          <div
-            key={`${r}-${c}`}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (dragFrom.current && !dropHandled.current) {
-                dropHandled.current = true;
-                onDrop(dragFrom.current, { row: r, col: c });
-                dragFrom.current = null;
-              }
-            }}
-            style={{
-              width: 56,
-              height: 56,
-              background:
-                hint && ((hint.a.row === r && hint.a.col === c) || (hint.b.row === r && hint.b.col === c))
-                  ? '#fff59d'
-                  : '#fff',
-              borderRadius: 8,
-              border: '1px solid #c8e6c9',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {cell ? (
-              isGenerator(cell) ? (
-                <Generator chain={cell.chain} onTap={() => onGeneratorTap({ row: r, col: c })} />
-              ) : (
-                <div
-                  draggable
-                  onDragStart={() => { dragFrom.current = { row: r, col: c }; dropHandled.current = false; }}
-                >
-                  <Item item={cell} />
-                </div>
-              )
-            ) : null}
-          </div>
-        )),
+        row.map((cell, c) => {
+          const isHover = !!hover && hover.row === r && hover.col === c;
+          return (
+            <div
+              key={`${r}-${c}`}
+              data-row={r}
+              data-col={c}
+              style={{
+                width: 56,
+                height: 56,
+                background:
+                  isHover
+                    ? '#c8e6c9'
+                    : hint && ((hint.a.row === r && hint.a.col === c) || (hint.b.row === r && hint.b.col === c))
+                    ? '#fff59d'
+                    : '#fff',
+                borderRadius: 8,
+                border: '1px solid #c8e6c9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {cell ? (
+                isGenerator(cell) ? (
+                  <Generator chain={cell.chain} onTap={() => onGeneratorTap({ row: r, col: c })} />
+                ) : (
+                  <div
+                    style={{ width: '100%', height: '100%', cursor: 'grab' }}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      dragFrom.current = { row: r, col: c };
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    }}
+                    onPointerMove={(e) => {
+                      if (!dragFrom.current) return;
+                      const target = cellAt(e.clientX, e.clientY);
+                      setHover(target);
+                    }}
+                    onPointerUp={(e) => {
+                      if (!dragFrom.current) { clearDrag(); return; }
+                      const target = cellAt(e.clientX, e.clientY) ?? hover;
+                      if (target && !(target.row === dragFrom.current.row && target.col === dragFrom.current.col)) {
+                        onDrop(dragFrom.current, target);
+                      }
+                      clearDrag();
+                    }}
+                    onPointerCancel={() => clearDrag()}
+                  >
+                    <Item item={cell} />
+                  </div>
+                )
+              ) : null}
+            </div>
+          );
+        }),
       )}
     </div>
   );
