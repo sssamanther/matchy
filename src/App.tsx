@@ -7,6 +7,7 @@ import GardenLevelBar from './components/GardenLevelBar';
 import PlotSelect from './components/PlotSelect';
 import PlotComplete from './components/PlotComplete';
 import Sparkles from './components/Sparkles';
+import EnergyBar from './components/EnergyBar';
 
 export default function App() {
   const g = useGame();
@@ -31,6 +32,13 @@ export default function App() {
         .pop { animation: pop 0.3s ease; }
       `}</style>
       <h1>Matchy 🌱</h1>
+      <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} />
+      {import.meta.env.DEV && (
+        <label style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+          <input type="checkbox" checked={g.unlimited} onChange={(e) => g.setUnlimited(e.target.checked)} />
+          Dev: Unlimited Energy
+        </label>
+      )}
       <div style={{ marginBottom: 8 }}>
         Plot {g.plot.id}: {g.plot.name} — stars {g.starsThisPlot}/{g.plot.starQuota}
       </div>

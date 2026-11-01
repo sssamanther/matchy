@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useReducer } from 'react';
+import { useCallback, useEffect, useRef, useReducer, useState } from 'react';
 import {
   createInitialState,
   gameReducer,
@@ -6,12 +6,14 @@ import {
 } from '../game/state';
 import { findMergeHint } from '../game/board';
 import { PLOTS } from '../game/plots';
+import { ENERGY_CONFIG } from '../game/energyConfig';
 import { loadGame, saveGame } from '../storage';
 import type { Position } from '../game/types';
 
 export function useGame() {
   const initial = createInitialState(loadGame());
   const [state, dispatch] = useReducer(gameReducer, initial);
+  const [unlimited, setUnlimited] = useState(false);
   const hydrated = useRef(false);
 
   // persist on changes (skip first render to avoid overwriting with defaults)
@@ -22,6 +24,12 @@ export function useGame() {
     }
     saveGame(toPersisted(state));
   }, [state]);
+
+  // energy regeneration tick
+  useEffect(() => {
+    const id = setInterval(() => dispatch({ type: 'REGENERATE', now: Date.now() }), 10000);
+    return () => clearInterval(id);
+  }, []);
 
   // rain ambient drop every 10s
   useEffect(() => {
@@ -52,9 +60,9 @@ export function useGame() {
   }, [bump]);
 
   const tapGenerator = useCallback((pos: Position) => {
-    dispatch({ type: 'TAP_GENERATOR', pos });
+    dispatch({ type: 'TAP_GENERATOR', pos, unlimited });
     bump();
-  }, [bump]);
+  }, [bump, unlimited]);
 
   const handleDrop = useCallback((from: Position, to: Position) => {
     dispatch({ type: 'DROP', from, to });
@@ -97,6 +105,11 @@ export function useGame() {
     orders: state.orders,
     progress: state.progress,
     starsThisPlot: state.progress.plotStars,
+    energy: state.energy,
+    maxEnergy: ENERGY_CONFIG.maxEnergy,
+    energyUpdatedAt: state.energyUpdatedAt,
+    unlimited,
+    setUnlimited,
     nudge: state.nudge,
     hint: state.hint,
     sparkle: state.sparkle,

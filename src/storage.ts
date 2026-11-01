@@ -45,6 +45,8 @@ function isValidPersisted(v: unknown): v is PersistedGameState {
   if (typeof p.plotStars !== 'number') return false;
   if (!Array.isArray(o.unlockedPlots)) return false;
   if (!o.unlockedPlots.every((n) => typeof n === 'number')) return false;
+  if (o.energy !== undefined && typeof o.energy !== 'number') return false;
+  if (o.energyUpdatedAt !== undefined && typeof o.energyUpdatedAt !== 'number') return false;
   return true;
 }
 

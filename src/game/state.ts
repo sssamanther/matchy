@@ -9,6 +9,8 @@ import {
 import { PLOTS } from './plots';
 import { generateOrder, rewardFor } from './orders';
 import { initialProgress, type Progress } from './progress';
+import { regenerateEnergy } from './energy';
+import { ENERGY_CONFIG } from './energyConfig';
 import { CHAIN_TIER_COUNT } from './types';
 import type { ChainId } from './types';
 import type { Board, Order, Position, Plot } from './types';
@@ -22,17 +24,22 @@ export interface PersistedGameState {
   orders: Order[];
   progress: Progress;
   unlockedPlots: number[];
+  energy?: number;
+  energyUpdatedAt?: number;
 }
 
 export interface GameState extends PersistedGameState {
   hint: { a: Position; b: Position } | null;
   sparkle: Position | null;
   nudge: boolean;
+  energy: number;
+  energyUpdatedAt: number;
 }
 
 export type GameAction =
   | { type: 'TAP_SOURCE'; index: number }
-  | { type: 'TAP_GENERATOR'; pos: Position }
+  | { type: 'TAP_GENERATOR'; pos: Position; unlimited?: boolean }
+  | { type: 'REGENERATE'; now: number }
   | { type: 'DROP'; from: Position; to: Position }
   | { type: 'SERVE_ORDER'; orderId: number }
   | { type: 'NEXT_PLOT' }
@@ -69,7 +76,7 @@ function initOrders(plot: Plot): Order[] {
   return out;
 }
 
-export function createInitialState(saved?: PersistedGameState | null): GameState {
+export function createInitialState(saved?: PersistedGameState | null, now: number = Date.now()): GameState {
   if (saved) {
     return {
       version: SAVE_VERSION,
@@ -78,6 +85,11 @@ export function createInitialState(saved?: PersistedGameState | null): GameState
       orders: saved.orders,
       progress: { ...saved.progress, completedOrders: saved.progress.completedOrders ?? 0 },
       unlockedPlots: saved.unlockedPlots ?? [1],
+    ...regenerateEnergy(
+      saved.energy ?? ENERGY_CONFIG.startingEnergy,
+      saved.energyUpdatedAt ?? now,
+      now,
+    ),
       hint: null,
       sparkle: null,
       nudge: false,
@@ -91,6 +103,8 @@ export function createInitialState(saved?: PersistedGameState | null): GameState
     orders: initOrders(plot),
     progress: initialProgress(),
     unlockedPlots: [1],
+    energy: ENERGY_CONFIG.startingEnergy,
+    energyUpdatedAt: now,
     hint: null,
     sparkle: null,
     nudge: false,
@@ -228,9 +242,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!spawnPos) {
         return { ...state, nudge: true };
       }
+      // energy check
+      const unlimited = action.unlimited === true;
+      if (!unlimited && state.energy < ENERGY_CONFIG.generatorCost) {
+        return { ...state, nudge: true };
+      }
       const nextBoard = state.board.map((row) => row.slice());
       nextBoard[spawnPos.row][spawnPos.col] = createItem(gen.chain, 1);
-      return { ...state, board: nextBoard, nudge: false };
+      const newEnergy = unlimited ? state.energy : state.energy - ENERGY_CONFIG.generatorCost;
+      return { ...state, board: nextBoard, nudge: false, energy: newEnergy };
     }
 
     case 'RAIN_DROP': {
@@ -250,6 +270,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'SET_SPARKLE':
       return { ...state, sparkle: action.value };
+
+    case 'REGENERATE': {
+      const r = regenerateEnergy(state.energy, state.energyUpdatedAt, action.now);
+      return { ...state, energy: r.energy, energyUpdatedAt: r.energyUpdatedAt };
+    }
 
     default:
       return state;

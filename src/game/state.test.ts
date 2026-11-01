@@ -240,3 +240,43 @@ describe('generators', () => {
     expect(resumed.board).toBeDefined();
   });
 });
+
+
+describe('energy', () => {
+  it('generator tap consumes 1 energy on success', () => {
+    const s = createInitialState();
+    const pos = { row: 0, col: 0 };
+    const cell = s.board[0][0];
+    expect(cell && 'kind' in cell).toBe(true);
+    const before = s.energy;
+    const next = gameReducer(s, { type: 'TAP_GENERATOR', pos, unlimited: false });
+    expect(next.energy).toBe(before - 1);
+  });
+
+  it('failed spawn (surrounded) consumes no energy', () => {
+    const s = createInitialState();
+    const b = s.board.map((r) => r.slice());
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) b[r][c] = null;
+    b[3][3] = { id: 1, kind: 'generator', chain: 'flower' } as any;
+    for (const [dr, dc] of [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]] as const) {
+      b[3+dr][3+dc] = { id: 2, chain: 'frog', tier: 1 };
+    }
+    const state = { ...s, board: b, energy: 5 };
+    const next = gameReducer(state, { type: 'TAP_GENERATOR', pos: { row: 3, col: 3 }, unlimited: false });
+    expect(next.energy).toBe(5);
+  });
+
+  it('blocked at zero energy', () => {
+    const s = createInitialState();
+    const state = { ...s, energy: 0 };
+    const next = gameReducer(state, { type: 'TAP_GENERATOR', pos: { row: 0, col: 0 }, unlimited: false });
+    expect(next.energy).toBe(0);
+  });
+
+  it('unlimited does not change saved energy', () => {
+    const s = createInitialState();
+    const before = s.energy;
+    const next = gameReducer(s, { type: 'TAP_GENERATOR', pos: { row: 0, col: 0 }, unlimited: true });
+    expect(next.energy).toBe(before);
+  });
+});
