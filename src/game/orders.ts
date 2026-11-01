@@ -1,4 +1,4 @@
-import type { Board, ChainId, Order, OrderRequirement } from './types';
+import { CHAIN_TIER_COUNT, type Board, type ChainId, type Order, type OrderRequirement } from './types';
 
 let nextOrderId = 1;
 export function resetOrderIds(): void { nextOrderId = 1; }
@@ -75,8 +75,27 @@ function makeRequirement(chains: ChainId[], tier: number, existing: Order[]): Or
 }
 
 export function generateOrder(ctx: OrderContext): Order {
-  const tier = getOrderTier(ctx.completedOrders, ctx.plotIndex);
-  const req = makeRequirement(ctx.chains, tier, ctx.existingOrders);
+  const range = plotTierRange(ctx.plotIndex);
+  const maxTier = Math.min(range.max, CHAIN_TIER_COUNT);
+  const baseTier = getOrderTier(ctx.completedOrders, ctx.plotIndex);
+  const used = new Set(ctx.existingOrders.flatMap((o) => o.requirements.map((r) => `${r.chain}:${r.tier}`)));
+
+  // Try the intended tier first, then neighbours inside the plot's tier range,
+  // so an already-requested chain:tier (e.g. two "Big Tadpole" orders) is only
+  // duplicated when every chain:tier in range is already taken.
+  const tierOrder = [baseTier, baseTier + 1, baseTier - 1, baseTier + 2, baseTier - 2].filter(
+    (t, i, arr) => t >= range.min && t <= maxTier && arr.indexOf(t) === i,
+  );
+  const available = ctx.chains.length ? ctx.chains : (['frog'] as ChainId[]);
+  for (const tier of tierOrder) {
+    const fresh = available.filter((c) => !used.has(`${c}:${tier}`));
+    if (!fresh.length) continue;
+    const chain = fresh[Math.floor(Math.random() * fresh.length)];
+    return { id: nextOrderId++, requirements: [{ chain, tier, count: getOrderQuantity(tier, 0) }] };
+  }
+
+  // Every chain:tier in range is already requested — fall back to the base tier.
+  const req = makeRequirement(ctx.chains, baseTier, ctx.existingOrders);
   return { id: nextOrderId++, requirements: [req] };
 }
 
@@ -144,14 +163,38 @@ export function countAvailable(board: Board, req: OrderRequirement): number {
 }
 
 export function migrateOrders(orders: Order[]): Order[] {
-  // convert legacy single-item orders (if any) already in new format; ensure requirements
-  return orders.map((o) => {
-    if (o.requirements && Array.isArray(o.requirements)) return o;
-    // legacy fallback
-    const legacy = o as any;
+  let changed = false;
+  // convert legacy single-item orders to the requirements format
+  const migrated: Order[] = orders.map((o) => {
+    if (Array.isArray(o.requirements)) return o;
+    changed = true;
+    const legacy = o as unknown as { chain?: ChainId; tier?: number; count?: number };
     if (legacy.chain && legacy.tier) {
-      return { id: nextOrderId++, requirements: [{ chain: legacy.chain, tier: legacy.tier, count: legacy.count ?? 1 }] };
+      return { id: o.id, requirements: [{ chain: legacy.chain, tier: legacy.tier, count: legacy.count ?? 1 }] };
     }
     return o;
   });
+
+  // The id counter lives in module state and restarts at 1 on every app
+  // launch. Advance it past every saved id so newly generated orders can
+  // never collide with active ones (colliding ids made one serve replace
+  // several orders at once and produced duplicate React keys).
+  let maxId = 0;
+  for (const o of migrated) if (o.id > maxId) maxId = o.id;
+  if (nextOrderId <= maxId) nextOrderId = maxId + 1;
+
+  // Heal saves that already contain duplicate ids (written by older builds):
+  // reissue a fresh id instead of dropping or merging the order.
+  const seen = new Set<number>();
+  const out = migrated.map((o) => {
+    if (!seen.has(o.id)) {
+      seen.add(o.id);
+      return o;
+    }
+    changed = true;
+    const reissued = { ...o, id: nextOrderId++ };
+    seen.add(reissued.id);
+    return reissued;
+  });
+  return changed ? out : orders;
 }

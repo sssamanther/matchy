@@ -226,9 +226,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case 'SERVE_ORDER': {
-      const order = state.orders.find((o) => o.id === action.orderId);
-      if (!order) return state;
-      // fulfillability
+      // Replace exactly one order slot: with legacy saves that contain
+      // duplicate ids, an id-based map() replaced every matching order
+      // with the same new order object (duplicated orders on screen).
+      const orderIndex = state.orders.findIndex((o) => o.id === action.orderId);
+      if (orderIndex === -1) return state;
+      const order = state.orders[orderIndex];
       // fulfillability
       if (!canFulfill(state.board, order)) return state;
 
@@ -262,7 +265,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         chains,
         completedOrders: newCompleted,
         plotIndex: state.plotIndex,
-        existingOrders: state.orders.filter((o) => o.id !== action.orderId),
+        existingOrders: state.orders.filter((_, i) => i !== orderIndex),
         board: nextBoard,
       });
 
@@ -277,7 +280,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const base = {
         ...state,
         board: nextBoard,
-        orders: state.orders.map((o) => (o.id === action.orderId ? newOrder : o)),
+        orders: state.orders.map((o, i) => (i === orderIndex ? newOrder : o)),
         progress: newProgress,
         starBalance: state.starBalance + reward,
         xp: state.xp + reward,
