@@ -24,7 +24,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: 16, fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto' }}>
+    <div style={{ padding: 16, fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box', minWidth: 0 }}>
       <style>{`
         @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.25); } 100% { transform: scale(1); } }
         .pop { animation: pop 0.3s ease; }

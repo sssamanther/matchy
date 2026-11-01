@@ -40,7 +40,7 @@ export default function Board({
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${board[0].length}, 1fr)`,
+        gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
         gap: 6,
         padding: 8,
         background: '#e8f5e9',
@@ -49,6 +49,9 @@ export default function Board({
         transition: 'transform 0.1s',
         touchAction: 'none',
         userSelect: 'none',
+        width: '100%',
+        boxSizing: 'border-box',
+        minWidth: 0,
       }}
     >
       {board.map((row, r) =>
@@ -60,8 +63,8 @@ export default function Board({
               data-row={r}
               data-col={c}
               style={{
-                width: 56,
-                height: 56,
+                width: '100%',
+                aspectRatio: '1 / 1',
                 background:
                   isHover
                     ? '#c8e6c9'
