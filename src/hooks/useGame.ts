@@ -31,18 +31,6 @@ export function useGame() {
     return () => clearInterval(id);
   }, []);
 
-  // energy regeneration tick
-  useEffect(() => {
-    const id = setInterval(() => dispatch({ type: 'REGENERATE', now: Date.now() }), 10000);
-    return () => clearInterval(id);
-  }, []);
-
-  // rain ambient drop every 10s
-  useEffect(() => {
-    const id = setInterval(() => dispatch({ type: 'RAIN_DROP' }), 10000);
-    return () => clearInterval(id);
-  }, []);
-
   // idle hint after ~8s
   const lastAction = useRef(Date.now());
   useEffect(() => {
