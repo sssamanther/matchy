@@ -32,6 +32,7 @@ export interface PersistedGameState {
   level?: number;
   completedRestoration?: string[];
   unlockedChains?: ChainId[];
+  pendingGenerators?: ChainId[];
   gardenUnlocks?: string[];
 }
 
@@ -46,6 +47,7 @@ export interface GameState extends PersistedGameState {
   level: number;
   completedRestoration: string[];
   unlockedChains: ChainId[];
+  pendingGenerators: ChainId[];
   gardenUnlocks: string[];
 }
 
@@ -64,6 +66,39 @@ export type GameAction =
   | { type: 'SET_NUDGE'; value: boolean }
   | { type: 'SET_SPARKLE'; value: Position | null }
   | { type: 'HYDRATE'; state: GameState };
+
+const UNLOCK_SCHEDULE: Record<number, ChainId[]> = {
+  3: ['plant'],
+  5: ['tool'],
+  7: ['woodland'],
+};
+
+function findEmptyCell(board: Board): Position | null {
+  for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+    if (board[r][c] === null) return { row: r, col: c };
+  }
+  return null;
+}
+
+function applyUnlocks(state: GameState, newLevel: number): GameState {
+  let s = { ...state, unlockedChains: [...state.unlockedChains], pendingGenerators: [...state.pendingGenerators] };
+  for (let lvl = state.level + 1; lvl <= newLevel; lvl++) {
+    const chains = UNLOCK_SCHEDULE[lvl] ?? [];
+    for (const ch of chains) {
+      if (s.unlockedChains.includes(ch)) continue;
+      s.unlockedChains.push(ch);
+      const cell = findEmptyCell(s.board);
+      if (cell) {
+        const b = s.board.map((row) => row.slice());
+        b[cell.row][cell.col] = createGenerator(ch);
+        s = { ...s, board: b };
+      } else {
+        s.pendingGenerators.push(ch);
+      }
+    }
+  }
+  return s;
+}
 
 function initBoard(plot: Plot): Board {
   const b = createEmptyBoard();
@@ -109,6 +144,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     level: saved.level && saved.level > 0 ? saved.level : levelFromXp(saved.xp ?? 0),
     completedRestoration: saved.completedRestoration ?? [],
     unlockedChains: saved.unlockedChains ?? (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
+    pendingGenerators: saved.pendingGenerators ?? [],
     gardenUnlocks: computeUnlockedFeatures((saved.completedRestoration ?? []).length, saved.gardenUnlocks ?? []),
     hint: null,
     sparkle: null,
@@ -129,7 +165,8 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     xp: 0,
     level: levelFromXp(0),
     completedRestoration: [],
-    unlockedChains: (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
+    unlockedChains: (['flower', 'frog'] as ChainId[]),
+    pendingGenerators: [],
     gardenUnlocks: [],
     hint: null,
     sparkle: null,
@@ -226,15 +263,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         completedOrders: newCompleted,
       };
 
-      return {
+      const newLevel = levelFromXp(state.xp + reward);
+      const base = {
         ...state,
         board: nextBoard,
         orders: state.orders.map((o) => (o.id === action.orderId ? newOrder : o)),
         progress: newProgress,
         starBalance: state.starBalance + reward,
         xp: state.xp + reward,
-        level: levelFromXp(state.xp + reward),
+        level: newLevel,
       };
+      if (newLevel > state.level) {
+        return applyUnlocks(base, newLevel);
+      }
+      return base;
     }
 
     case 'NEXT_PLOT': {
@@ -316,14 +358,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (!isTaskAvailable(task, state.completedRestoration)) return state;
       if (state.starBalance < task.cost) return state;
       const newCompleted = [...state.completedRestoration, task.id];
-      return {
+      const newLevel = levelFromXp(state.xp + task.cost);
+      const base = {
         ...state,
         starBalance: state.starBalance - task.cost,
         completedRestoration: newCompleted,
         gardenUnlocks: computeUnlockedFeatures(newCompleted.length, state.gardenUnlocks),
         xp: state.xp + task.cost,
-        level: levelFromXp(state.xp + task.cost),
+        level: newLevel,
       };
+      if (newLevel > state.level) return applyUnlocks(base, newLevel);
+      return base;
     }
 
     case 'RESET':

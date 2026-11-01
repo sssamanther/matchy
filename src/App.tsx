@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGame } from './hooks/useGame';
 import { xpForNextLevel as xpProgress } from './game/progress';
 import Board from './components/Board';
@@ -8,9 +8,28 @@ import EnergyBar from './components/EnergyBar';
 import Sparkles from './components/Sparkles';
 import PlotSelect from './components/PlotSelect';
 
+function formatCountdown(updatedAt: number): string {
+  const remaining = Math.max(0, 60000 - (Date.now() - updatedAt));
+  const s = Math.ceil(remaining / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+}
+
 export default function App() {
   const g = useGame();
   const [screen, setScreen] = useState<'play' | 'garden' | 'plots'>('play');
+  const [levelUp, setLevelUp] = useState(false);
+  const prevLevel = useRef(g.level);
+  useEffect(() => {
+    if (g.level > prevLevel.current) {
+      setLevelUp(true);
+      const t = setTimeout(() => setLevelUp(false), 2000);
+      prevLevel.current = g.level;
+      return () => clearTimeout(t);
+    }
+    prevLevel.current = g.level;
+  }, [g.level]);
 
   if (screen === 'plots') {
     return (
@@ -25,14 +44,46 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: 16, fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box', minWidth: 0 }}>
+    <div style={{ padding: 12, fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', width: '100%', boxSizing: 'border-box', minWidth: 0, height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.25); } 100% { transform: scale(1); } }
         .pop { animation: pop 0.3s ease; }
       `}</style>
       <h1>Little Winds</h1>
       <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 8 }}>A Cozy Merge Story</div>
+      {levelUp && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'pop 0.6s ease' }}>
+          <div style={{ background: '#fff', padding: 20, borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+            <div style={{ fontSize: 24 }}>Level Up!</div>
+            <div style={{ fontSize: 32 }}>Level {g.level}</div>
+            <div>✨</div>
+          </div>
+        </div>
+      )}
       <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} />
+      {g.energyToast && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            background: '#fff3e0',
+            border: '1px solid #ffb74d',
+            padding: '12px 16px',
+            borderRadius: 12,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            animation: 'pop 0.3s ease',
+            textAlign: 'center',
+          }}>
+            ⚡ Out of Energy!<br />Next in {formatCountdown(g.energyUpdatedAt)}
+          </div>
+        </div>
+      )}
       <div style={{ marginBottom: 8, fontWeight: 'bold' }}>⭐ Stars: {g.starBalance}</div>
       <div style={{ marginBottom: 8 }}>XP: {g.xp} (Level {g.level})</div>
       <div style={{ height: 6, background: '#eee', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
@@ -48,11 +99,11 @@ export default function App() {
           <button onClick={() => setScreen('plots')} style={{ marginTop: 4, marginLeft: 8 }}>Dev: Plots</button>
         </div>
       )}
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Board board={g.board} nudge={g.nudge} hint={g.hint} onDrop={g.handleDrop} onGeneratorTap={g.tapGenerator} />
         <Sparkles pos={g.sparkle} />
       </div>
-      <div style={{ marginTop: 12 }}>
+      <div style={{ marginTop: 8, maxHeight: '30vh', overflowY: 'auto' }}>
         <OrderPanel orders={g.orders} board={g.board} onServe={g.serveOrder} />
       </div>
       <div style={{ marginTop: 12 }}>

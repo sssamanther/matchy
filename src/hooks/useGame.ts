@@ -16,6 +16,8 @@ export function useGame() {
   const initial = createInitialState(loadGame());
   const [state, dispatch] = useReducer(gameReducer, initial);
   const [unlimited, setUnlimited] = useState(false);
+  const [energyToast, setEnergyToast] = useState(false);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydrated = useRef(false);
 
   // persist on changes (skip first render to avoid overwriting with defaults)
@@ -56,9 +58,15 @@ export function useGame() {
   }, [bump]);
 
   const tapGenerator = useCallback((pos: Position) => {
+    if (!unlimited && state.energy < ENERGY_CONFIG.generatorCost) {
+      setEnergyToast(true);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setEnergyToast(false), 2500);
+      return;
+    }
     dispatch({ type: 'TAP_GENERATOR', pos, unlimited });
     bump();
-  }, [bump, unlimited]);
+  }, [bump, unlimited, state.energy]);
 
   const handleDrop = useCallback((from: Position, to: Position) => {
     dispatch({ type: 'DROP', from, to });
@@ -127,6 +135,7 @@ export function useGame() {
     energyUpdatedAt: state.energyUpdatedAt,
     unlimited,
     setUnlimited,
+    energyToast,
     nudge: state.nudge,
     hint: state.hint,
     sparkle: state.sparkle,

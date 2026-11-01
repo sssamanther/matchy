@@ -52,7 +52,7 @@ export default function OrderPanel({
           {reward}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
         {orders.map((o) => {
           const have = collected(board, o);
           const ready = have >= o.count;
@@ -62,7 +62,7 @@ export default function OrderPanel({
               style={{
                 flex: '1 1 140px',
                 minWidth: 140,
-                padding: 12,
+                padding: 8,
                 borderRadius: 12,
                 border: ready ? '2px solid #4caf50' : '1px solid #ccc',
                 background: ready ? '#e8f5e9' : '#fff',

@@ -1,8 +1,8 @@
 /** Core game types for Matchy (merge-2). */
 
-export type ChainId = 'frog' | 'flower' | 'mushroom' | 'berry';
+export type ChainId = 'frog' | 'flower' | 'mushroom' | 'berry' | 'plant' | 'tool' | 'woodland';
 
-export const CHAINS: readonly ChainId[] = ['frog', 'flower', 'mushroom', 'berry'];
+export const CHAINS: readonly ChainId[] = ['frog', 'flower', 'mushroom', 'berry', 'plant', 'tool', 'woodland'];
 
 /** Number of tiers per chain (tier 1 = base spawn item, top tier = master). */
 export const CHAIN_TIER_COUNT = 5;
@@ -15,6 +15,9 @@ export const CHAIN_EMOJI: Record<ChainId, string> = {
   flower: '🌸',
   mushroom: '🍄',
   berry: '🫐',
+  plant: '🌿',
+  tool: '🛠️',
+  woodland: '🦉',
 };
 
 /** Human-readable tier labels per chain (index 0 = tier 1). */
@@ -23,6 +26,9 @@ export const CHAIN_TIER_LABELS: Record<ChainId, readonly string[]> = {
   flower: ['seed', 'sprout', 'bud', 'bloom', 'Grand Bloom'],
   mushroom: ['spore', 'button', 'shroom', 'cap', 'Glowing Shroom'],
   berry: ['sprig', 'blossom', 'green berry', 'ripe berry', 'Berry Basket'],
+  plant: ['seedling', 'sapling', 'plant', 'bush', 'Grand Tree'],
+  tool: ['rusty tool', 'tool', 'fine tool', 'master tool', 'Golden Tool'],
+  woodland: ['feather', 'nest', 'bird', 'owl', 'Grand Owl'],
 };
 
 export interface Item {
