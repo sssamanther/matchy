@@ -6,6 +6,7 @@ import {
 } from '../game/state';
 import { findMergeHint } from '../game/board';
 import { PLOTS } from '../game/plots';
+import { RESTORATION_TASKS, isTaskAvailable } from '../game/restoration';
 import { ENERGY_CONFIG } from '../game/energyConfig';
 import { loadGame, saveGame, clearSave } from '../storage';
 import type { Position } from '../game/types';
@@ -78,6 +79,11 @@ export function useGame() {
     bump();
   }, [bump]);
 
+  const restoreTask = useCallback((taskId: string) => {
+    dispatch({ type: 'RESTORE_TASK', taskId });
+    bump();
+  }, [bump]);
+
   const resetGame = useCallback(() => {
     if (typeof window !== 'undefined' && !window.confirm('Reset all progress and start fresh?')) return;
     clearSave();
@@ -106,6 +112,13 @@ export function useGame() {
     orders: state.orders,
     progress: state.progress,
     starsThisPlot: state.progress.plotStars,
+    starBalance: state.starBalance,
+    xp: state.xp,
+    level: state.level,
+    completedRestoration: state.completedRestoration,
+    restorationTasks: RESTORATION_TASKS,
+    isTaskAvailable,
+    restoreTask,
     energy: state.energy,
     maxEnergy: ENERGY_CONFIG.maxEnergy,
     energyUpdatedAt: state.energyUpdatedAt,

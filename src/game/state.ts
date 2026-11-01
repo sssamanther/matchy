@@ -7,13 +7,13 @@ import {
   generatorSpawnCell,
 } from './board';
 import { PLOTS } from './plots';
+import { RESTORATION_TASKS, isTaskAvailable } from './restoration';
 import { generateOrder, generateOrderSet, rewardFor, migrateOrders } from './orders';
 import { initialProgress, type Progress } from './progress';
 import { regenerateEnergy } from './energy';
 import { ENERGY_CONFIG } from './energyConfig';
 import { CHAIN_TIER_COUNT } from './types';
-import type { ChainId } from './types';
-import type { Board, Order, Position, Plot } from './types';
+import type { Board, ChainId, Order, Position, Plot } from './types';
 
 export const SAVE_VERSION = 1;
 
@@ -26,6 +26,11 @@ export interface PersistedGameState {
   unlockedPlots: number[];
   energy?: number;
   energyUpdatedAt?: number;
+  starBalance?: number;
+  xp?: number;
+  level?: number;
+  completedRestoration?: string[];
+  unlockedChains?: ChainId[];
 }
 
 export interface GameState extends PersistedGameState {
@@ -34,6 +39,11 @@ export interface GameState extends PersistedGameState {
   nudge: boolean;
   energy: number;
   energyUpdatedAt: number;
+  starBalance: number;
+  xp: number;
+  level: number;
+  completedRestoration: string[];
+  unlockedChains: ChainId[];
 }
 
 export type GameAction =
@@ -41,6 +51,7 @@ export type GameAction =
   | { type: 'TAP_GENERATOR'; pos: Position; unlimited?: boolean }
   | { type: 'REGENERATE'; now: number }
   | { type: 'RESET' }
+  | { type: 'RESTORE_TASK'; taskId: string }
   | { type: 'DROP'; from: Position; to: Position }
   | { type: 'SERVE_ORDER'; orderId: number }
   | { type: 'NEXT_PLOT' }
@@ -90,9 +101,14 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       saved.energyUpdatedAt ?? now,
       now,
     ),
-      hint: null,
-      sparkle: null,
-      nudge: false,
+    starBalance: saved.starBalance ?? saved.progress?.stars ?? 0,
+    xp: saved.xp ?? 0,
+    level: saved.level ?? 0,
+    completedRestoration: saved.completedRestoration ?? [],
+    unlockedChains: saved.unlockedChains ?? (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
+    hint: null,
+    sparkle: null,
+    nudge: false,
     };
   }
   const plot = PLOTS[0];
@@ -105,6 +121,11 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     unlockedPlots: [1],
     energy: ENERGY_CONFIG.startingEnergy,
     energyUpdatedAt: now,
+    starBalance: 0,
+    xp: 0,
+    level: 0,
+    completedRestoration: [],
+    unlockedChains: (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
     hint: null,
     sparkle: null,
     nudge: false,
@@ -119,6 +140,13 @@ function toPersisted(s: GameState): PersistedGameState {
     orders: s.orders,
     progress: s.progress,
     unlockedPlots: s.unlockedPlots,
+    energy: s.energy,
+    energyUpdatedAt: s.energyUpdatedAt,
+    starBalance: s.starBalance,
+    xp: s.xp,
+    level: s.level,
+    completedRestoration: s.completedRestoration,
+    unlockedChains: s.unlockedChains,
   };
 }
 
@@ -197,6 +225,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         board: nextBoard,
         orders: state.orders.map((o) => (o.id === action.orderId ? newOrder : o)),
         progress: newProgress,
+        starBalance: state.starBalance + reward,
+        xp: state.xp + reward,
       };
     }
 
@@ -271,6 +301,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'SET_SPARKLE':
       return { ...state, sparkle: action.value };
+
+    case 'RESTORE_TASK': {
+      const task = RESTORATION_TASKS.find((t) => t.id === action.taskId);
+      if (!task) return state;
+      if (state.completedRestoration.includes(task.id)) return state;
+      if (!isTaskAvailable(task, state.completedRestoration)) return state;
+      if (state.starBalance < task.cost) return state;
+      return {
+        ...state,
+        starBalance: state.starBalance - task.cost,
+        completedRestoration: [...state.completedRestoration, task.id],
+        xp: state.xp + task.cost,
+      };
+    }
 
     case 'RESET':
       return createInitialState(null, Date.now());
