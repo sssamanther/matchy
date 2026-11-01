@@ -8,7 +8,18 @@ export interface OrderContext {
   completedOrders: number;
   plotIndex: number;
   existingOrders: Order[];
-  board: Board;
+  /** Current board (kept for feasibility checks; generation itself is board-agnostic). */
+  board?: Board;
+  /** Player level — drives how many requirements orders may carry. Defaults to 1. */
+  level?: number;
+  /** Preferred tier for this slot — lets the initial set spread tiers across orders. */
+  preferredTier?: number;
+  /**
+   * Slots that still need at least one *fresh* chain:tier after this order.
+   * Set generation passes it so three orders can never exhaust the eligible
+   * pool (which would force the duplicated-atom fallback below).
+   */
+  reserveSlots?: number;
 }
 
 export const PLOT_TIER_RANGE: Record<number, { min: number; max: number }> = {
@@ -56,50 +67,188 @@ export function rewardFor(order: Order): number {
   return total;
 }
 
-function getOrderQuantity(tier: number, completedOrders: number): number {
-  if (tier <= 2 && completedOrders % 3 === 0) return 2;
+/**
+ * Item count requested for a tier. Deliberately deterministic (identical to
+ * the previous behaviour, which always evaluated `0 % 3 === 0`): low-tier
+ * orders ask for 2 items, higher tiers for 1.
+ */
+function getOrderQuantity(tier: number): number {
+  if (tier <= 2) return 2;
   return 1;
 }
 
-function chooseChain(chains: ChainId[], tier: number, existing: Order[]): ChainId {
-  const available = chains.length ? chains : (['frog'] as ChainId[]);
-  const used = new Set(existing.flatMap((o) => o.requirements.map((r) => `${r.chain}:${r.tier}`)));
-  const candidates = available.filter((c) => !used.has(`${c}:${tier}`));
-  const pool = candidates.length ? candidates : available;
-  return pool[Math.floor(Math.random() * pool.length)];
+/**
+ * Order-independent canonical key for a requirement set: every requirement's
+ * chain, tier and quantity, sorted. Two orders are "the same order" iff their
+ * keys match — regardless of requirement order, ids, or display names.
+ */
+export function orderRequirementsKey(requirements: OrderRequirement[]): string {
+  return requirements.map((r) => `${r.chain}:${r.tier}:${r.count}`).sort().join('|');
 }
 
-function makeRequirement(chains: ChainId[], tier: number, existing: Order[]): OrderRequirement {
-  const chain = chooseChain(chains, tier, existing);
-  return { chain, tier, count: getOrderQuantity(tier, 0) };
+/** Convenience: canonical key of a whole order. */
+export function orderKey(order: Order): string {
+  return orderRequirementsKey(order.requirements);
 }
 
-export function generateOrder(ctx: OrderContext): Order {
+// ---------------------------------------------------------------------------
+// Candidate generation (bounded, no retry loops)
+// ---------------------------------------------------------------------------
+
+type Shape = 1 | 2 | 3;
+
+interface Atom {
+  chain: ChainId;
+  tier: number;
+}
+
+/** chain:tier slots already requested by active orders — never reused. */
+function activeAtoms(orders: Order[]): Set<string> {
+  const used = new Set<string>();
+  for (const o of orders) for (const r of o.requirements) used.add(`${r.chain}:${r.tier}`);
+  return used;
+}
+
+function availableChains(chains: ChainId[]): ChainId[] {
+  // frog is the ever-unlocked fallback chain (matches historical behaviour).
+  return chains.length ? chains : (['frog'] as ChainId[]);
+}
+
+/** Tiers eligible for this order: plot range ∪ chain cap, base tier first. */
+function eligibleTiers(ctx: OrderContext): number[] {
   const range = plotTierRange(ctx.plotIndex);
   const maxTier = Math.min(range.max, CHAIN_TIER_COUNT);
-  const baseTier = getOrderTier(ctx.completedOrders, ctx.plotIndex);
-  const used = new Set(ctx.existingOrders.flatMap((o) => o.requirements.map((r) => `${r.chain}:${r.tier}`)));
-
-  // Try the intended tier first, then neighbours inside the plot's tier range,
-  // so an already-requested chain:tier (e.g. two "Big Tadpole" orders) is only
-  // duplicated when every chain:tier in range is already taken.
-  const tierOrder = [baseTier, baseTier + 1, baseTier - 1, baseTier + 2, baseTier - 2].filter(
-    (t, i, arr) => t >= range.min && t <= maxTier && arr.indexOf(t) === i,
-  );
-  const available = ctx.chains.length ? ctx.chains : (['frog'] as ChainId[]);
-  for (const tier of tierOrder) {
-    const fresh = available.filter((c) => !used.has(`${c}:${tier}`));
-    if (!fresh.length) continue;
-    const chain = fresh[Math.floor(Math.random() * fresh.length)];
-    return { id: nextOrderId++, requirements: [{ chain, tier, count: getOrderQuantity(tier, 0) }] };
+  const base = getOrderTier(ctx.completedOrders, ctx.plotIndex);
+  const seq = [ctx.preferredTier, base, base + 1, base - 1, base + 2, base - 2];
+  const out: number[] = [];
+  for (const t of seq) {
+    if (t === undefined || t < range.min || t > maxTier) continue;
+    if (!out.includes(t)) out.push(t);
   }
-
-  // Every chain:tier in range is already requested — fall back to the base tier.
-  const req = makeRequirement(ctx.chains, baseTier, ctx.existingOrders);
-  return { id: nextOrderId++, requirements: [req] };
+  return out;
 }
 
-export function generateOrderSet(chains: ChainId[], plotIndex: number, completedOrders: number): Order[] {
+/**
+ * Every eligible chain:tier atom, ordered by tier preference, minus the
+ * slots in `used`. Only unlocked chains and producible tiers appear here,
+ * so generated orders can never reference locked generators or unreachable
+ * tiers.
+ */
+function eligibleAtoms(ctx: OrderContext, used: ReadonlySet<string>): Atom[] {
+  const atoms: Atom[] = [];
+  for (const tier of eligibleTiers(ctx)) {
+    for (const chain of availableChains(ctx.chains)) {
+      if (!used.has(`${chain}:${tier}`)) atoms.push({ chain, tier });
+    }
+  }
+  return atoms;
+}
+
+/**
+ * Requirement-count distribution by player level:
+ *  - Level 1:   mostly single, occasional easy two-item
+ *  - Level 2-3: more frequent two-item
+ *  - Level 4-6: mix of single/two, occasional three
+ *  - Level 7+:  varied two- and three-item combinations
+ */
+function shapeWeights(level: number): Array<[Shape, number]> {
+  if (level <= 1) return [[1, 80], [2, 20]];
+  if (level <= 3) return [[1, 55], [2, 45]];
+  if (level <= 6) return [[1, 40], [2, 45], [3, 15]];
+  return [[1, 25], [2, 45], [3, 30]];
+}
+
+/** Weighted-random preferred shape, then the remaining shapes by weight. */
+function shapeCandidates(level: number): Shape[] {
+  const weights = shapeWeights(level);
+  const total = weights.reduce((n, [, w]) => n + w, 0);
+  const weightOf = (s: Shape) => weights.find(([sh]) => sh === s)?.[1] ?? 0;
+  let x = Math.random() * total;
+  let picked: Shape = weights[weights.length - 1][0];
+  for (const [shape, w] of weights) {
+    x -= w;
+    if (x <= 0) {
+      picked = shape;
+      break;
+    }
+  }
+  const rest = weights
+    .map(([s]) => s)
+    .filter((s) => s !== picked)
+    .sort((a, b) => weightOf(b) - weightOf(a));
+  return [picked, ...rest];
+}
+
+/**
+ * Single-pass greedy pick of `shape` distinct atoms. Each slot prefers a
+ * requirement whose chain *and* tier are both unused inside this order, then
+ * an unused chain, then anything still fresh. Bounded by the atom list —
+ * no random retries.
+ */
+function pickAtoms(atoms: Atom[], shape: number): Atom[] {
+  const chosen: Atom[] = [];
+  const usedChains = new Set<ChainId>();
+  const usedTiers = new Set<number>();
+  for (let i = 0; i < shape; i++) {
+    const remaining = atoms.filter((a) => !chosen.includes(a));
+    if (!remaining.length) break;
+    const freshBoth = remaining.filter((a) => !usedChains.has(a.chain) && !usedTiers.has(a.tier));
+    const freshChain = remaining.filter((a) => !usedChains.has(a.chain));
+    const pool = freshBoth.length ? freshBoth : freshChain.length ? freshChain : remaining;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    chosen.push(pick);
+    usedChains.add(pick.chain);
+    usedTiers.add(pick.tier);
+  }
+  return chosen;
+}
+
+function toRequirements(atoms: Atom[]): OrderRequirement[] {
+  return atoms.map((a) => ({ chain: a.chain, tier: a.tier, count: getOrderQuantity(a.tier) }));
+}
+
+/**
+ * Generate one order that is distinct from every active order at the
+ * chain:tier level (a strictly stronger guarantee than distinct requirement
+ * sets). Bounded candidate selection:
+ *   1. build the eligible atom list (unlocked chains, producible tiers,
+ *      minus every chain:tier an active order already requests),
+ *   2. try the level's preferred requirement count, then smaller shapes,
+ *   3. only if the pool is *completely* exhausted, fall back deterministically
+ *      to the first eligible atom (documented limitation: with two unlocked
+ *      chains on a narrow-tier plot, three multi-item orders can use every
+ *      slot; the duplicate heals when any order is served).
+ */
+export function generateOrder(ctx: OrderContext): Order {
+  const level = ctx.level ?? 1;
+  const fresh = eligibleAtoms(ctx, activeAtoms(ctx.existingOrders));
+  const cap = ctx.reserveSlots === undefined
+    ? Number.POSITIVE_INFINITY
+    : Math.max(1, fresh.length - ctx.reserveSlots);
+
+  for (const shape of shapeCandidates(level)) {
+    if (shape > cap || fresh.length < shape) continue;
+    const chosen = pickAtoms(fresh, shape);
+    if (chosen.length === shape) {
+      return { id: nextOrderId++, requirements: toRequirements(chosen) };
+    }
+  }
+
+  // Deterministic fallback — never uses Math.random, never loops.
+  const pool = eligibleAtoms(ctx, new Set<string>());
+  const atom: Atom = pool[0] ?? {
+    chain: availableChains(ctx.chains)[0],
+    tier: getOrderTier(ctx.completedOrders, ctx.plotIndex),
+  };
+  return { id: nextOrderId++, requirements: toRequirements([atom]) };
+}
+
+/**
+ * The three orders shown when a plot opens. Slots take turns preferring each
+ * tier in the plot's range so orders spread across easy and hard tiers, and
+ * each slot reserves a fresh chain:tier for the slots after it.
+ */
+export function generateOrderSet(chains: ChainId[], plotIndex: number, completedOrders: number, level = 1): Order[] {
   const range = plotTierRange(plotIndex);
   const min = range.min;
   const max = Math.min(range.max, 5);
@@ -109,50 +258,23 @@ export function generateOrderSet(chains: ChainId[], plotIndex: number, completed
   while (tiers.length < 3) tiers.push(max);
 
   const out: Order[] = [];
-  const seen = new Set<string>();
-
-  const tryMake = (tier: number, attempts = 0): Order | null => {
-    if (attempts > 10) return null;
-    const reqs: OrderRequirement[] = [];
-    const r1 = makeRequirement(chains, tier, out);
-    reqs.push(r1);
-    const multi = completedOrders >= 3 && Math.random() < 0.3;
-    if (multi && chains.length > 1) {
-      const t2 = Math.max(range.min, tier - 1);
-      const r2 = makeRequirement(chains, t2, out);
-      if (!(r2.chain === r1.chain && r2.tier === r1.tier)) reqs.push(r2);
-    }
-    const candidate: Order = { id: nextOrderId++, requirements: reqs };
-    const key = candidate.requirements.map((r) => r.chain + ':' + r.tier + ':' + r.count).sort().join('|');
-    if (seen.has(key)) return tryMake(tier, attempts + 1);
-    seen.add(key);
-    return candidate;
-  };
-
-  for (const tier of tiers) {
-    let o = tryMake(tier);
-    if (!o) o = tryMake(Math.min(max, tier + 1));
-    if (o) out.push(o);
-  }
-  while (out.length < 3) {
-    const o = tryMake(min);
-    if (o) out.push(o);
-    else break;
+  for (let slot = 0; slot < 3; slot++) {
+    out.push(generateOrder({
+      chains,
+      completedOrders,
+      plotIndex,
+      existingOrders: out,
+      level,
+      preferredTier: tiers[slot],
+      reserveSlots: 2 - slot,
+    }));
   }
   return out;
 }
 
-export function canFulfill(board: Board, order: Order): boolean {
-  // check if all requirements can be met with current inventory (no double count across reqs? each req distinct type)
-  for (const r of order.requirements) {
-    let n = 0;
-    for (const row of board) for (const cell of row) {
-      if (cell && 'tier' in cell && cell.chain === r.chain && cell.tier === r.tier) n++;
-    }
-    if (n < r.count) return false;
-  }
-  return true;
-}
+// ---------------------------------------------------------------------------
+// Fulfilment
+// ---------------------------------------------------------------------------
 
 export function countAvailable(board: Board, req: OrderRequirement): number {
   let n = 0;
@@ -161,6 +283,29 @@ export function countAvailable(board: Board, req: OrderRequirement): number {
   }
   return n;
 }
+
+/**
+ * Ready only when the board can satisfy *every* requirement — counting
+ * requirements that share a chain:tier together (mirrored exactly by the
+ * consumption logic in SERVE_ORDER, so readiness and serving can never
+ * disagree).
+ */
+export function canFulfill(board: Board, order: Order): boolean {
+  const needed = new Map<string, OrderRequirement>();
+  for (const r of order.requirements) {
+    const key = `${r.chain}:${r.tier}`;
+    const prev = needed.get(key);
+    needed.set(key, prev ? { ...prev, count: prev.count + r.count } : { ...r });
+  }
+  for (const req of needed.values()) {
+    if (countAvailable(board, req) < req.count) return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy-save handling
+// ---------------------------------------------------------------------------
 
 export function migrateOrders(orders: Order[]): Order[] {
   let changed = false;
@@ -196,5 +341,42 @@ export function migrateOrders(orders: Order[]): Order[] {
     seen.add(reissued.id);
     return reissued;
   });
+  return changed ? out : orders;
+}
+
+/**
+ * Non-destructive load-time healing for saves written before duplicate-order
+ * fixes: those builds could persist several orders with *identical*
+ * requirement sets (the confirmed playtest case: three Froglet Tier 3
+ * orders). The first occurrence of each set is kept untouched; later
+ * duplicates get freshly generated requirements that clash with no other
+ * active order, while keeping their (already-unique) ids so React keys,
+ * progress and saved state are unaffected. Returns the input array untouched
+ * when there is nothing to heal.
+ */
+export function reconcileOrders(orders: Order[], ctx: OrderContext): Order[] {
+  if (orders.length === 0) return orders;
+  const seen = new Set<string>();
+  const out: Order[] = [];
+  let changed = false;
+
+  for (let i = 0; i < orders.length; i++) {
+    const o = orders[i];
+    const key = orderKey(o);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(o);
+      continue;
+    }
+    changed = true;
+    // Regenerate against everything else: orders already processed (kept or
+    // replaced) plus every order still waiting — so the replacement cannot
+    // collide with anyone. If even that pool is exhausted the fallback may
+    // repeat an atom; healing still improves the save and never loops.
+    const others = [...out, ...orders.slice(i + 1)];
+    const replacement = generateOrder({ ...ctx, existingOrders: others });
+    seen.add(orderKey(replacement));
+    out.push({ ...o, requirements: replacement.requirements });
+  }
   return changed ? out : orders;
 }

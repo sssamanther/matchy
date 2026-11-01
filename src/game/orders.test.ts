@@ -62,7 +62,9 @@ function fillBoard(s: GameState): GameState {
   const board = s.board.map((r) => r.slice());
   for (const o of s.orders) {
     for (const r of o.requirements) {
-      let need = r.count;
+      // Only top up what is missing — items for still-active orders persist
+      // between iterations and must not be duplicated on every fill.
+      let need = r.count - countAvailable(board, r);
       for (let row = 0; row < 7 && need > 0; row++) {
         for (let col = 0; col < 7 && need > 0; col++) {
           if (board[row][col] === null) {

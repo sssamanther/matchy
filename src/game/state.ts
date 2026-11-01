@@ -9,7 +9,7 @@ import {
 import { PLOTS } from './plots';
 import { RESTORATION_TASKS, isTaskAvailable } from './restoration';
 import { computeUnlockedFeatures } from './garden';
-import { generateOrder, generateOrderSet, rewardFor, migrateOrders, canFulfill } from './orders';
+import { generateOrder, generateOrderSet, rewardFor, migrateOrders, reconcileOrders, canFulfill } from './orders';
 import { initialProgress, levelFromXp, type Progress } from './progress';
 import { regenerateEnergy } from './energy';
 import { ENERGY_CONFIG } from './energyConfig';
@@ -153,8 +153,8 @@ function initBoard(plot: Plot): Board {
   return b;
 }
 
-function initOrders(chains: ChainId[], plotIndex: number, completedOrders: number): Order[] {
-  return generateOrderSet(chains, plotIndex, completedOrders);
+function initOrders(chains: ChainId[], plotIndex: number, completedOrders: number, level: number): Order[] {
+  return generateOrderSet(chains, plotIndex, completedOrders, level);
 }
 
 export function createInitialState(saved?: PersistedGameState | null, now: number = Date.now()): GameState {
@@ -187,14 +187,28 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       sparkle: null,
       nudge: false,
     };
-    return flushPendingGenerators(applyUnlocks(base, 0, level));
+    const hydrated = flushPendingGenerators(applyUnlocks(base, 0, level));
+    // Heal duplicate requirement sets inherited from pre-fix saves (e.g. the
+    // three identical Froglet Tier 3 orders) — non-destructive: ids, progress
+    // and every unique order survive untouched.
+    return {
+      ...hydrated,
+      orders: reconcileOrders(hydrated.orders, {
+        chains: hydrated.unlockedChains,
+        completedOrders: hydrated.progress.completedOrders,
+        plotIndex: hydrated.plotIndex,
+        existingOrders: hydrated.orders,
+        board: hydrated.board,
+        level: hydrated.level,
+      }),
+    };
   }
   const plot = PLOTS[0];
   return {
     version: SAVE_VERSION,
     plotIndex: 0,
     board: initBoard(plot),
-    orders: initOrders(['flower', 'frog'], 0, 0),
+    orders: initOrders(['flower', 'frog'], 0, 0, levelFromXp(0)),
     progress: initialProgress(),
     unlockedPlots: [1],
     energy: ENERGY_CONFIG.startingEnergy,
@@ -299,12 +313,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const reward = rewardFor(order);
       const newCompleted = state.progress.completedOrders + 1;
       const chains = state.unlockedChains;
+      const newLevel = levelFromXp(state.xp + reward);
       const newOrder = generateOrder({
         chains,
         completedOrders: newCompleted,
         plotIndex: state.plotIndex,
         existingOrders: state.orders.filter((_, i) => i !== orderIndex),
         board: nextBoard,
+        level: newLevel,
       });
 
       const newProgress: Progress = {
@@ -314,7 +330,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         completedOrders: newCompleted,
       };
 
-      const newLevel = levelFromXp(state.xp + reward);
       const base = {
         ...state,
         board: nextBoard,
@@ -340,7 +355,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         plotIndex: state.plotIndex + 1,
         board: initBoard(next),
-        orders: initOrders(state.unlockedChains, state.plotIndex + 1, state.progress.completedOrders),
+        orders: initOrders(state.unlockedChains, state.plotIndex + 1, state.progress.completedOrders, state.level),
         unlockedPlots: unlocked,
         progress: { ...state.progress, currentPlot: next.id, plotStars: 0 },
         hint: null,
@@ -357,7 +372,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         plotIndex: action.index,
         board: initBoard(p),
-        orders: initOrders(state.unlockedChains, action.index, state.progress.completedOrders),
+        orders: initOrders(state.unlockedChains, action.index, state.progress.completedOrders, state.level),
         progress: { ...state.progress, currentPlot: p.id, plotStars: 0 },
         hint: null,
         sparkle: null,
