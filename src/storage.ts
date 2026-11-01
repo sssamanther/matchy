@@ -29,12 +29,16 @@ function isOrders(v: unknown): v is PersistedGameState['orders'] {
     if (!o || typeof o !== 'object') return false;
     const x = o as Record<string, unknown>;
     if (typeof x.id !== 'number') return false;
-    if (!Array.isArray(x.requirements)) return false;
-    return (x.requirements as unknown[]).every((r) => {
-      if (!r || typeof r !== 'object') return false;
-      const rr = r as Record<string, unknown>;
-      return typeof rr.chain === 'string' && typeof rr.tier === 'number' && typeof rr.count === 'number';
-    });
+    // new format
+    if (Array.isArray(x.requirements)) {
+      return (x.requirements as unknown[]).every((r) => {
+        if (!r || typeof r !== 'object') return false;
+        const rr = r as Record<string, unknown>;
+        return typeof rr.chain === 'string' && typeof rr.tier === 'number' && typeof rr.count === 'number';
+      });
+    }
+    // legacy single-item format
+    return typeof x.chain === 'string' && typeof x.tier === 'number' && typeof x.count === 'number';
   });
 }
 

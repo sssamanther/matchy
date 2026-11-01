@@ -90,33 +90,37 @@ export function generateOrderSet(chains: ChainId[], plotIndex: number, completed
   while (tiers.length < 3) tiers.push(max);
 
   const out: Order[] = [];
-  for (const tier of tiers) {
-    // occasionally multi-item for level 3+
-    const multi = completedOrders >= 3 && Math.random() < 0.3;
+  const seen = new Set<string>();
+
+  const tryMake = (tier: number, attempts = 0): Order | null => {
+    if (attempts > 10) return null;
     const reqs: OrderRequirement[] = [];
     const r1 = makeRequirement(chains, tier, out);
     reqs.push(r1);
+    const multi = completedOrders >= 3 && Math.random() < 0.3;
     if (multi && chains.length > 1) {
       const t2 = Math.max(range.min, tier - 1);
       const r2 = makeRequirement(chains, t2, out);
-      if (r2.chain !== r1.chain || r2.tier !== r1.tier) reqs.push(r2);
+      if (!(r2.chain === r1.chain && r2.tier === r1.tier)) reqs.push(r2);
     }
-    // dedup: if identical to existing, adjust tier
-    out.push({ id: nextOrderId++, requirements: reqs });
-  }
-  // dedup identical orders
-  const seen = new Set<string>();
-  return out.map((o) => {
-    const key = o.requirements.map((r) => `${r.chain}:${r.tier}:${r.count}`).join('|');
-    if (seen.has(key)) {
-      // bump tier of first req
-      const nr = o.requirements.map((r, i) => i === 0 ? { ...r, tier: Math.min(5, r.tier + 1) } : r);
-      seen.add(nr.map((r) => `${r.chain}:${r.tier}:${r.count}`).join('|'));
-      return { ...o, requirements: nr };
-    }
+    const candidate: Order = { id: nextOrderId++, requirements: reqs };
+    const key = candidate.requirements.map((r) => r.chain + ':' + r.tier + ':' + r.count).sort().join('|');
+    if (seen.has(key)) return tryMake(tier, attempts + 1);
     seen.add(key);
-    return o;
-  });
+    return candidate;
+  };
+
+  for (const tier of tiers) {
+    let o = tryMake(tier);
+    if (!o) o = tryMake(Math.min(max, tier + 1));
+    if (o) out.push(o);
+  }
+  while (out.length < 3) {
+    const o = tryMake(min);
+    if (o) out.push(o);
+    else break;
+  }
+  return out;
 }
 
 export function canFulfill(board: Board, order: Order): boolean {

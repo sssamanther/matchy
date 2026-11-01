@@ -38,13 +38,15 @@ export default function OrderPanel({
           {reward}
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
         {orders.map((o) => {
           const ready = canFulfill(board, o);
           return (
             <div
               key={o.id}
               style={{
+                minWidth: 150,
+                flexShrink: 0,
                 padding: 6,
                 borderRadius: 8,
                 border: ready ? '2px solid #4caf50' : '1px solid #ccc',

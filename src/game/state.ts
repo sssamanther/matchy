@@ -71,7 +71,8 @@ export type GameAction =
   | { type: 'HYDRATE'; state: GameState };
 
 const UNLOCK_SCHEDULE: Record<number, ChainId[]> = {
-  3: ['plant'],
+  3: ['plant', 'mushroom'],
+  4: ['berry'],
   5: ['tool'],
   7: ['woodland'],
 };
@@ -84,7 +85,7 @@ function findEmptyCell(board: Board): Position | null {
 }
 
 function applyUnlocks(state: GameState, newLevel: number): GameState {
-  let s = { ...state, unlockedChains: [...state.unlockedChains], pendingGenerators: [...state.pendingGenerators] };
+  let s = { ...state, level: newLevel, unlockedChains: [...state.unlockedChains], pendingGenerators: [...state.pendingGenerators] };
   for (let lvl = state.level + 1; lvl <= newLevel; lvl++) {
     const chains = UNLOCK_SCHEDULE[lvl] ?? [];
     for (const ch of chains) {
@@ -125,30 +126,32 @@ function initOrders(chains: ChainId[], plotIndex: number, completedOrders: numbe
 
 export function createInitialState(saved?: PersistedGameState | null, now: number = Date.now()): GameState {
   if (saved) {
-    return {
+    const level = saved.level && saved.level > 0 ? saved.level : levelFromXp(saved.xp ?? 0);
+    const base: GameState = {
       version: SAVE_VERSION,
       plotIndex: saved.plotIndex,
       board: saved.board,
       orders: migrateOrders(saved.orders),
       progress: { ...saved.progress, completedOrders: saved.progress.completedOrders ?? 0 },
       unlockedPlots: saved.unlockedPlots ?? [1],
-    ...regenerateEnergy(
-      saved.energy ?? ENERGY_CONFIG.startingEnergy,
-      saved.energyUpdatedAt ?? now,
-      now,
-    ),
-    starBalance: saved.starBalance ?? saved.progress?.stars ?? 0,
-    xp: saved.xp ?? 0,
-    level: saved.level && saved.level > 0 ? saved.level : levelFromXp(saved.xp ?? 0),
-    completedRestoration: saved.completedRestoration ?? [],
-    unlockedChains: saved.unlockedChains ?? (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
-    pendingGenerators: saved.pendingGenerators ?? [],
-    gardenUnlocks: computeUnlockedFeatures((saved.completedRestoration ?? []).length, saved.gardenUnlocks ?? []),
-    selectedGoalId: saved.selectedGoalId ?? null,
-    hint: null,
-    sparkle: null,
-    nudge: false,
+      ...regenerateEnergy(
+        saved.energy ?? ENERGY_CONFIG.startingEnergy,
+        saved.energyUpdatedAt ?? now,
+        now,
+      ),
+      starBalance: saved.starBalance ?? saved.progress?.stars ?? 0,
+      xp: saved.xp ?? 0,
+      level: 0,
+      completedRestoration: saved.completedRestoration ?? [],
+      unlockedChains: saved.unlockedChains ?? (['frog', 'flower'] as ChainId[]),
+      pendingGenerators: saved.pendingGenerators ?? [],
+      gardenUnlocks: computeUnlockedFeatures((saved.completedRestoration ?? []).length, saved.gardenUnlocks ?? []),
+      selectedGoalId: saved.selectedGoalId ?? null,
+      hint: null,
+      sparkle: null,
+      nudge: false,
     };
+    return applyUnlocks(base, level);
   }
   const plot = PLOTS[0];
   return {

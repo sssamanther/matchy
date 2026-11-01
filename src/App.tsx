@@ -66,25 +66,21 @@ export default function App() {
         @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.25); } 100% { transform: scale(1); } }
         .pop { animation: pop 0.3s ease; }
       `}</style>
-      <h1 style={{ margin: 0, fontSize: 20 }}>Little Winds</h1>
-      <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>A Cozy Merge Story</div>
       <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} />
-      <div style={{ fontSize: 12, marginBottom: 2 }}>⭐ Stars: {g.starBalance} · XP: {g.xp} (Level {g.level})</div>
-      <div style={{ height: 6, background: '#eee', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
-        <div style={{ width: `${xpProgress(g.xp).pct}%`, height: '100%', background: '#90caf9', transition: 'width 0.3s' }} />
-      </div>
-      <div style={{ fontSize: 11, marginBottom: 4 }}>
-        Level {g.level} — {xpProgress(g.xp).current}/{xpProgress(g.xp).needed} XP to Level {g.level + 1}
-      </div>
+      <div style={{ fontSize: 12, marginBottom: 2 }}>⭐ Stars: {g.starBalance}</div>
       {goal && (
-        <div style={{ fontSize: 11, marginBottom: 4 }}>
-          🌿 {goal.name}: {g.starBalance}/{goal.cost} stars ({goalRemaining} more)
+        <div style={{ fontSize: 11, marginBottom: 2 }}>
+          🌿 {goal.name}: {g.starBalance}/{goal.cost} ({goalRemaining} more)
           <div style={{ height: 4, background: '#eee', borderRadius: 2, overflow: 'hidden' }}>
             <div style={{ width: `${goalProgress * 100}%`, height: '100%', background: '#81c784', transition: 'width 0.3s' }} />
           </div>
-          {goalProgress >= 1 && <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>Ready to Restore!</span>}
+          {goalProgress >= 1 && <span style={{ color: '#2e7d32', fontWeight: 'bold' }}> Ready to Restore!</span>}
         </div>
       )}
+      <div style={{ fontSize: 12, marginBottom: 2 }}>Level {g.level} — {xpProgress(g.xp).current}/{xpProgress(g.xp).needed} XP to Level {g.level + 1}</div>
+      <div style={{ height: 6, background: '#eee', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
+        <div style={{ width: `${xpProgress(g.xp).pct}%`, height: '100%', background: '#90caf9', transition: 'width 0.3s' }} />
+      </div>
       {starReward && (
         <div style={{ position: 'fixed', top: 60, right: 16, color: '#f9a825', fontWeight: 'bold', animation: 'pop 0.6s ease', zIndex: 999 }}>
           +{starReward} ⭐
@@ -99,12 +95,12 @@ export default function App() {
           <button onClick={g.resetGame} style={{ marginLeft: 8 }}>Dev: Reset</button>
         </div>
       )}
-      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ marginBottom: 6, maxHeight: '22vh', overflowY: 'auto', minHeight: 0 }}>
+        <OrderPanel orders={g.orders} board={g.board} onServe={g.serveOrder} />
+      </div>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 8 }}>
         <Board board={g.board} nudge={g.nudge} hint={g.hint} onDrop={g.handleDrop} onGeneratorTap={g.tapGenerator} />
         <Sparkles pos={g.sparkle} />
-      </div>
-      <div style={{ marginTop: 6, maxHeight: '28vh', overflowY: 'auto', minHeight: 0 }}>
-        <OrderPanel orders={g.orders} board={g.board} onServe={g.serveOrder} />
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
         <button onClick={() => setScreen('play')} style={{ flex: 1 }}>🧩 Board</button>

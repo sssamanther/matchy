@@ -21,8 +21,8 @@ export const XP_THRESHOLDS: number[] = [0, 0, 50, 125, 225, 350, 500];
 
 export function xpForNextLevel(xp: number): { current: number; needed: number; pct: number } {
   const level = levelFromXp(xp);
-  const nextThreshold = XP_THRESHOLDS[level] ?? (XP_THRESHOLDS[XP_THRESHOLDS.length - 1] + 200 * (level - (XP_THRESHOLDS.length - 1)));
-  const prevThreshold = XP_THRESHOLDS[level - 1] ?? 0;
+  const nextThreshold = XP_THRESHOLDS[level + 1] ?? (XP_THRESHOLDS[XP_THRESHOLDS.length - 1] + 200 * (level + 1 - (XP_THRESHOLDS.length - 1)));
+  const prevThreshold = XP_THRESHOLDS[level] ?? 0;
   const current = xp - prevThreshold;
   const needed = nextThreshold - prevThreshold;
   const pct = needed > 0 ? (current / needed) * 100 : 100;
