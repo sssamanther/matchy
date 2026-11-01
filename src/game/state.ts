@@ -84,9 +84,16 @@ function findEmptyCell(board: Board): Position | null {
   return null;
 }
 
-function applyUnlocks(state: GameState, newLevel: number): GameState {
+/**
+ * Grant every unlock between `prevLevel` (exclusive) and `newLevel`
+ * (inclusive). Pass the level *before* the gain — callers must not set
+ * `state.level` to `newLevel` beforehand or the loop never runs.
+ * Generators are placed on the first free cell; when the board is full the
+ * chain is queued in `pendingGenerators` for later delivery.
+ */
+function applyUnlocks(state: GameState, prevLevel: number, newLevel: number): GameState {
   let s = { ...state, level: newLevel, unlockedChains: [...state.unlockedChains], pendingGenerators: [...state.pendingGenerators] };
-  for (let lvl = state.level + 1; lvl <= newLevel; lvl++) {
+  for (let lvl = Math.max(0, prevLevel) + 1; lvl <= newLevel; lvl++) {
     const chains = UNLOCK_SCHEDULE[lvl] ?? [];
     for (const ch of chains) {
       if (s.unlockedChains.includes(ch)) continue;
@@ -96,12 +103,38 @@ function applyUnlocks(state: GameState, newLevel: number): GameState {
         const b = s.board.map((row) => row.slice());
         b[cell.row][cell.col] = createGenerator(ch);
         s = { ...s, board: b };
-      } else {
+      } else if (!s.pendingGenerators.includes(ch)) {
         s.pendingGenerators.push(ch);
       }
     }
   }
   return s;
+}
+
+/**
+ * Deliver queued generator unlocks into free cells without ever
+ * overwriting existing cells. Chains that still have no room stay queued
+ * (exactly once), so a pending unlock is never lost or granted twice.
+ */
+function flushPendingGenerators(state: GameState): GameState {
+  if (state.pendingGenerators.length === 0) return state;
+  const remaining: ChainId[] = [];
+  let board = state.board;
+  let delivered = 0;
+  for (const ch of state.pendingGenerators) {
+    if (remaining.includes(ch)) continue; // drop accidental duplicates
+    const cell = findEmptyCell(board);
+    if (cell) {
+      const b = board.map((row) => row.slice());
+      b[cell.row][cell.col] = createGenerator(ch);
+      board = b;
+      delivered++;
+    } else {
+      remaining.push(ch);
+    }
+  }
+  if (delivered === 0 && remaining.length === state.pendingGenerators.length) return state;
+  return { ...state, board, pendingGenerators: remaining };
 }
 
 function initBoard(plot: Plot): Board {
@@ -126,7 +159,10 @@ function initOrders(chains: ChainId[], plotIndex: number, completedOrders: numbe
 
 export function createInitialState(saved?: PersistedGameState | null, now: number = Date.now()): GameState {
   if (saved) {
-    const level = saved.level && saved.level > 0 ? saved.level : levelFromXp(saved.xp ?? 0);
+    // Reconcile against the XP-derived level: a save written by an older
+    // build may carry a stale/absent level field.
+    const xpLevel = levelFromXp(saved.xp ?? 0);
+    const level = Math.max(saved.level && saved.level > 0 ? saved.level : 0, xpLevel);
     const base: GameState = {
       version: SAVE_VERSION,
       plotIndex: saved.plotIndex,
@@ -151,7 +187,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       sparkle: null,
       nudge: false,
     };
-    return applyUnlocks(base, level);
+    return flushPendingGenerators(applyUnlocks(base, 0, level));
   }
   const plot = PLOTS[0];
   return {
@@ -192,6 +228,7 @@ function toPersisted(s: GameState): PersistedGameState {
     level: s.level,
     completedRestoration: s.completedRestoration,
     unlockedChains: s.unlockedChains,
+    pendingGenerators: s.pendingGenerators,
     gardenUnlocks: s.gardenUnlocks,
     selectedGoalId: s.selectedGoalId,
   };
@@ -222,7 +259,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (res.kind === 'merge' && res.spawned.length) {
         next.sparkle = res.spawned[0];
       }
-      return next;
+      // A move/merge frees a cell — deliver any pending generator unlock.
+      return flushPendingGenerators(next);
     }
 
     case 'SERVE_ORDER': {
@@ -287,9 +325,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         level: newLevel,
       };
       if (newLevel > state.level) {
-        return applyUnlocks(base, newLevel);
+        return flushPendingGenerators(applyUnlocks(base, state.level, newLevel));
       }
-      return base;
+      return flushPendingGenerators(base);
     }
 
     case 'NEXT_PLOT': {
@@ -384,7 +422,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         level: newLevel,
         selectedGoalId: state.selectedGoalId === task.id ? null : state.selectedGoalId,
       };
-      if (newLevel > state.level) return applyUnlocks(base, newLevel);
+      if (newLevel > state.level) return flushPendingGenerators(applyUnlocks(base, state.level, newLevel));
       return base;
     }
 
