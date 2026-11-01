@@ -13,11 +13,11 @@ export interface OrderContext {
 
 // Plot-based minimum/maximum order tiers
 export const PLOT_TIER_RANGE: Record<number, { min: number; max: number }> = {
-  1: { min: 1, max: 2 },
-  2: { min: 2, max: 3 },
-  3: { min: 2, max: 4 },
-  4: { min: 3, max: 4 },
-  5: { min: 3, max: 5 },
+  1: { min: 1, max: 3 },
+  2: { min: 3, max: 4 },
+  3: { min: 3, max: 5 },
+  4: { min: 4, max: 5 },
+  5: { min: 4, max: 6 },
 };
 
 export function plotTierRange(plotIndex: number): { min: number; max: number } {
@@ -77,16 +77,51 @@ export function generateOrder(ctx: OrderContext): Order {
   return { id: nextOrderId++, chain, tier, count };
 }
 
+export function generateOrderSet(
+  chains: ChainId[],
+  plotIndex: number,
+  completedOrders: number,
+): Order[] {
+  const range = plotTierRange(plotIndex);
+  const min = range.min;
+  const max = Math.min(range.max, 5); // cap at supported chain tier
+  // difficulty mix: accessible, medium, challenging
+  const tiers: number[] = [min];
+  if (max > min) tiers.push(Math.min(min + 1, max));
+  if (max > min + 1) tiers.push(max);
+  // pad to 3
+  while (tiers.length < 3) tiers.push(max);
+  const out: Order[] = [];
+  for (const tier of tiers) {
+    const chain = chooseChain(chains, tier, out);
+    const count = getOrderQuantity(tier, completedOrders);
+    out.push({ id: nextOrderId++, chain, tier, count });
+  }
+  return out;
+}
+
 export function migrateOrders(orders: Order[], plotIndex: number, chains: ChainId[]): Order[] {
   const range = plotTierRange(plotIndex);
-  return orders.map((o) => {
-    if (o.tier >= range.min && o.tier <= range.max) return o;
-    // upgrade (or clamp) to minimum tier
-    const existing = orders.filter((x) => x.id !== o.id);
-    const tier = range.min;
-    const chain = chooseChain(chains, tier, existing);
-    return { id: nextOrderId++, chain, tier, count: o.count };
-  });
+  const result: Order[] = [];
+  for (const o of orders) {
+    const isOutOfRange = o.tier < range.min || o.tier > range.max;
+    const isDuplicate = result.some((r) => r.chain === o.chain && r.tier === o.tier && r.count === o.count);
+    if (isOutOfRange || isDuplicate) {
+      const replacement = generateOrder({
+        chains,
+        completedOrders: 0,
+        plotIndex,
+        existingOrders: result,
+        board: [] as any,
+      });
+      // ensure tier within range
+      replacement.tier = Math.max(range.min, Math.min(replacement.tier, range.max));
+      result.push(replacement);
+    } else {
+      result.push(o);
+    }
+  }
+  return result;
 }
 
 export function canFulfill(board: Board, order: Order): boolean {

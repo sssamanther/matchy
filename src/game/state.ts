@@ -7,7 +7,7 @@ import {
   generatorSpawnCell,
 } from './board';
 import { PLOTS } from './plots';
-import { generateOrder, rewardFor, migrateOrders } from './orders';
+import { generateOrder, generateOrderSet, rewardFor, migrateOrders } from './orders';
 import { initialProgress, type Progress } from './progress';
 import { regenerateEnergy } from './energy';
 import { ENERGY_CONFIG } from './energyConfig';
@@ -68,12 +68,7 @@ function initBoard(plot: Plot): Board {
 
 function initOrders(plot: Plot, plotIndex: number, completedOrders: number): Order[] {
   const chains = plot.sources.map((s) => s.chain);
-  const out: Order[] = [];
-  const ctxBase = { chains, completedOrders, plotIndex, existingOrders: out, board: createEmptyBoard() };
-  for (let i = 0; i < 3; i++) {
-    out.push(generateOrder({ ...ctxBase, existingOrders: [...out] }));
-  }
-  return out;
+  return generateOrderSet(chains, plotIndex, completedOrders);
 }
 
 export function createInitialState(saved?: PersistedGameState | null, now: number = Date.now()): GameState {
