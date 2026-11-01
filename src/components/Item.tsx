@@ -4,7 +4,6 @@ import type { Item as ItemType } from '../game/types';
 export default function Item({ item }: { item: ItemType }) {
   return (
     <div
-      draggable
       title={CHAIN_TIER_LABELS[item.chain][item.tier - 1]}
       style={{
         width: '100%',
