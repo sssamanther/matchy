@@ -280,3 +280,36 @@ describe('energy', () => {
     expect(next.energy).toBe(before);
   });
 });
+
+
+describe('no automatic spawning', () => {
+  it('new plot has generators but no ordinary items', () => {
+    const s = createInitialState();
+    const items = s.board.flat().filter((c) => c && 'tier' in c);
+    expect(items.length).toBe(0);
+    const gens = s.board.flat().filter((c) => c && 'kind' in c && c.kind === 'generator');
+    expect(gens.length).toBeGreaterThan(0);
+  });
+
+  it('switching plots does not add items', () => {
+    const s = createInitialState();
+    const with2 = { ...s, unlockedPlots: [1,2] };
+    const next = gameReducer(with2, { type: 'SELECT_PLOT', index: 1 });
+    const items = next.board.flat().filter((c) => c && 'tier' in c);
+    expect(items.length).toBe(0);
+  });
+});
+
+describe('reset', () => {
+  it('RESET returns fresh state', () => {
+    const s = createInitialState();
+    // simulate progress
+    const progressed = { ...s, progress: { ...s.progress, stars: 5, completedOrders: 3 }, unlockedPlots: [1,2] };
+    const reset = gameReducer(progressed, { type: 'RESET' });
+    expect(reset.plotIndex).toBe(0);
+    expect(reset.progress.stars).toBe(0);
+    expect(reset.progress.completedOrders).toBe(0);
+    expect(reset.unlockedPlots).toEqual([1]);
+    expect(reset.energy).toBe(100);
+  });
+});

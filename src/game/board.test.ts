@@ -103,6 +103,32 @@ describe('spawnItem', () => {
   });
 });
 
+describe('merge-2 regression', () => {
+  it('merging one pair leaves other identical items unchanged', () => {
+    const board = createEmptyBoard();
+    board[0][0] = { id: 1, chain: 'frog', tier: 1 };
+    board[0][1] = { id: 2, chain: 'frog', tier: 1 };
+    board[0][2] = { id: 3, chain: 'frog', tier: 1 };
+    board[0][3] = { id: 4, chain: 'frog', tier: 1 };
+    const res = mergeAt(board, { row: 0, col: 0 }, { row: 0, col: 1 });
+    expect(res.kind).toBe('merge');
+    // one tier2 at to
+    expect((res.board[0][1] as any)?.tier).toBe(2);
+    // two remaining tier1
+    const remaining = res.board.flat().filter((c) => c && 'tier' in c && c.tier === 1);
+    expect(remaining.length).toBe(2);
+  });
+
+  it('invalid merge leaves board unchanged', () => {
+    const board = createEmptyBoard();
+    board[0][0] = { id: 1, chain: 'frog', tier: 1 };
+    board[0][1] = { id: 2, chain: 'flower', tier: 1 };
+    const res = mergeAt(board, { row: 0, col: 0 }, { row: 0, col: 1 });
+    expect(res.kind).toBe('none');
+    expect(res.board[0][0]?.id).toBe(1);
+  });
+});
+
 describe('emptyCells', () => {
   it('counts holes', () => {
     const board = createEmptyBoard();

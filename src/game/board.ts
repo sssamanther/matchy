@@ -196,8 +196,15 @@ export function mergeAt(board: Board, from: Position, to: Position): MergeResult
   const fromInComponent = component.some((p) => p.row === from.row && p.col === from.col);
   const totalConsumed = component.length + (fromInComponent ? 0 : 1);
 
-  const consumedPositions: Position[] = [...component];
-  if (!fromInComponent) consumedPositions.push(from);
+  // For a normal merge-2, only consume the two dragged items.
+  // Merge-5 bonus consumes the whole connected group when >=5 are involved.
+  let consumedPositions: Position[];
+  if (totalConsumed >= 5) {
+    consumedPositions = [...component];
+    if (!fromInComponent) consumedPositions.push(from);
+  } else {
+    consumedPositions = [from, to];
+  }
 
   // Clear consumed cells.
   for (const p of consumedPositions) next[p.row][p.col] = null;

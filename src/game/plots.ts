@@ -8,12 +8,6 @@ export const PLOTS: Plot[] = [
   {
     id: 1, name: 'First Sprouts', emoji: '🌱',
     sources: [src(0, 0, 'flower'), src(6, 6, 'frog')],
-    startingItems: [
-      { pos: { row: 1, col: 1 }, chain: 'flower', tier: 1 },
-      { pos: { row: 1, col: 2 }, chain: 'flower', tier: 1 },
-      { pos: { row: 5, col: 5 }, chain: 'frog', tier: 1 },
-      { pos: { row: 5, col: 4 }, chain: 'frog', tier: 1 },
-    ],
     starQuota: 3,
   },
   {

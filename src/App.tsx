@@ -34,10 +34,13 @@ export default function App() {
       <h1>Matchy 🌱</h1>
       <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} />
       {import.meta.env.DEV && (
-        <label style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
-          <input type="checkbox" checked={g.unlimited} onChange={(e) => g.setUnlimited(e.target.checked)} />
-          Dev: Unlimited Energy
-        </label>
+        <div style={{ marginBottom: 8, fontSize: 12 }}>
+          <label style={{ display: 'block' }}>
+            <input type="checkbox" checked={g.unlimited} onChange={(e) => g.setUnlimited(e.target.checked)} />
+            Dev: Unlimited Energy
+          </label>
+          <button onClick={g.resetGame} style={{ marginTop: 4 }}>Dev: Reset Game</button>
+        </div>
       )}
       <div style={{ marginBottom: 8 }}>
         Plot {g.plot.id}: {g.plot.name} — stars {g.starsThisPlot}/{g.plot.starQuota}

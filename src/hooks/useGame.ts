@@ -7,7 +7,7 @@ import {
 import { findMergeHint } from '../game/board';
 import { PLOTS } from '../game/plots';
 import { ENERGY_CONFIG } from '../game/energyConfig';
-import { loadGame, saveGame } from '../storage';
+import { loadGame, saveGame, clearSave } from '../storage';
 import type { Position } from '../game/types';
 
 export function useGame() {
@@ -90,6 +90,13 @@ export function useGame() {
     bump();
   }, [bump]);
 
+  const resetGame = useCallback(() => {
+    if (typeof window !== 'undefined' && !window.confirm('Reset all progress and start fresh?')) return;
+    clearSave();
+    dispatch({ type: 'RESET' });
+    bump();
+  }, [bump]);
+
   // clear nudge after animation
   useEffect(() => {
     if (!state.nudge) return;
@@ -126,5 +133,6 @@ export function useGame() {
     serveOrder,
     nextPlot,
     selectPlot,
+    resetGame,
   };
 }

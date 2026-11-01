@@ -40,6 +40,7 @@ export type GameAction =
   | { type: 'TAP_SOURCE'; index: number }
   | { type: 'TAP_GENERATOR'; pos: Position; unlimited?: boolean }
   | { type: 'REGENERATE'; now: number }
+  | { type: 'RESET' }
   | { type: 'DROP'; from: Position; to: Position }
   | { type: 'SERVE_ORDER'; orderId: number }
   | { type: 'NEXT_PLOT' }
@@ -270,6 +271,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'SET_SPARKLE':
       return { ...state, sparkle: action.value };
+
+    case 'RESET':
+      return createInitialState(null, Date.now());
 
     case 'REGENERATE': {
       const r = regenerateEnergy(state.energy, state.energyUpdatedAt, action.now);
