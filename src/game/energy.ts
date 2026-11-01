@@ -39,3 +39,12 @@ export function regenerateEnergy(
 export function spendEnergy(energy: number, amount: number): number {
   return clampEnergy(energy - amount);
 }
+
+/**
+ * DEV-ONLY (temporary): instantly restore energy to max and restart the
+ * normal regeneration clock exactly as if the tank had filled naturally.
+ * Used by the debug "Refill Energy" button — see src/dev/devTools.ts.
+ */
+export function refillEnergy(now: number): EnergyState {
+  return { energy: ENERGY_CONFIG.maxEnergy, energyUpdatedAt: now };
+}

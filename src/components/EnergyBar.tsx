@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
+// DEV-ONLY (temporary): debug tooling gate — see src/dev/devTools.ts
+import { isDevToolsEnabled } from '../dev/devTools';
 
 export default function EnergyBar({
   energy,
   maxEnergy,
   energyUpdatedAt,
+  onDevRefill,
 }: {
   energy: number;
   maxEnergy: number;
   energyUpdatedAt: number;
+  /** DEV-ONLY (temporary): debug refill button handler; hidden unless dev tools are enabled. */
+  onDevRefill?: () => void;
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -26,6 +31,30 @@ export default function EnergyBar({
         <div style={{ flex: 1, height: 8, background: '#eee', borderRadius: 4, overflow: 'hidden' }}>
           <div style={{ width: `${pct}%`, height: '100%', background: '#fbc02d' }} />
         </div>
+        {/* DEV-ONLY (temporary): debug refill — see src/dev/devTools.ts.
+            The static build flag is deliberately first: in a release build it
+            folds to `false` and esbuild compiles this button out entirely.
+            The runtime gate (isDevToolsEnabled) carries the shared logic. */}
+        {(__LITTLEWINDS_DEV_TOOLS__ || import.meta.env.DEV) && onDevRefill && isDevToolsEnabled() && (
+          <button
+            type="button"
+            data-testid="dev-refill-energy"
+            title="DEV ONLY: instantly refill energy"
+            onClick={onDevRefill}
+            style={{
+              fontSize: 11,
+              padding: '2px 6px',
+              border: '1px dashed #f57c00',
+              borderRadius: 4,
+              background: '#fff3e0',
+              color: '#e65100',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ⚡ DEV Refill
+          </button>
+        )}
       </div>
       <div style={{ fontSize: 12, opacity: 0.8 }}>
         {full ? 'Full' : `Next energy in ${formatTime(regen)}`}

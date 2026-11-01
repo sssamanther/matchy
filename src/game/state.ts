@@ -11,7 +11,7 @@ import { RESTORATION_TASKS, isTaskAvailable } from './restoration';
 import { computeUnlockedFeatures } from './garden';
 import { generateOrder, generateOrderSet, rewardFor, migrateOrders, reconcileOrders, canFulfill } from './orders';
 import { initialProgress, levelFromXp, type Progress } from './progress';
-import { regenerateEnergy } from './energy';
+import { regenerateEnergy, refillEnergy } from './energy';
 import { ENERGY_CONFIG } from './energyConfig';
 import { CHAIN_TIER_COUNT } from './types';
 import type { Board, ChainId, Order, Position, Plot } from './types';
@@ -57,6 +57,8 @@ export type GameAction =
   | { type: 'TAP_SOURCE'; index: number }
   | { type: 'TAP_GENERATOR'; pos: Position; unlimited?: boolean }
   | { type: 'REGENERATE'; now: number }
+  // DEV-ONLY (temporary): debug "Refill Energy" button — see src/dev/devTools.ts
+  | { type: 'DEV_REFILL_ENERGY'; now: number }
   | { type: 'RESET' }
   | { type: 'RESTORE_TASK'; taskId: string }
   | { type: 'SELECT_GOAL'; goalId: string | null }
@@ -446,6 +448,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'REGENERATE': {
       const r = regenerateEnergy(state.energy, state.energyUpdatedAt, action.now);
+      return { ...state, energy: r.energy, energyUpdatedAt: r.energyUpdatedAt };
+    }
+
+    // DEV-ONLY (temporary): debug "Refill Energy" button. Updates only the
+    // two energy fields with the same semantics as a natural fill, so stars,
+    // XP, orders, board and garden progress are untouched and the regular
+    // regeneration system keeps its normal timing.
+    case 'DEV_REFILL_ENERGY': {
+      const r = refillEnergy(action.now);
       return { ...state, energy: r.energy, energyUpdatedAt: r.energyUpdatedAt };
     }
 

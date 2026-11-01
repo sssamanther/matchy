@@ -66,7 +66,7 @@ export default function App() {
         @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.25); } 100% { transform: scale(1); } }
         .pop { animation: pop 0.3s ease; }
       `}</style>
-      <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} />
+      <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} onDevRefill={g.devRefillEnergy} />
       <div style={{ fontSize: 12, marginBottom: 2 }}>⭐ Stars: {g.starBalance}</div>
       {goal && (
         <div style={{ fontSize: 11, marginBottom: 2 }}>

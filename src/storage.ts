@@ -91,13 +91,63 @@ export function loadGame(): PersistedGameState | null {
   }
 }
 
-export function saveGame(state: PersistedGameState): void {
+export function saveGame(state: PersistedGameState): boolean {
+  const envelope: SaveEnvelope = { version: SAVE_VERSION, data: { ...state, version: SAVE_VERSION } };
+  let json: string;
   try {
-    const envelope: SaveEnvelope = { version: SAVE_VERSION, data: { ...state, version: SAVE_VERSION } };
-    localStorage.setItem(KEY, JSON.stringify(envelope));
-  } catch {
-    /* ignore */
+    json = JSON.stringify(envelope);
+  } catch (err) {
+    console.error('[LittleWinds] Save failed: serialization error', err);
+    return false;
   }
+  // Write, then verify by reading back; retry once on failure.
+  // (2026-11-01 incident: a WebView process persisted nothing for ~52s of
+  // play and the empty `catch` hid it entirely — a hard process kill then
+  // rolled back ~22 stars of progress. Failing saves must never be silent.)
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      localStorage.setItem(KEY, json);
+      if (localStorage.getItem(KEY) === json) return true;
+      lastError = new Error('write verification mismatch (stored value differs)');
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  console.error('[LittleWinds] SAVE FAILED — progress since the last successful save may be lost on restart', lastError);
+  return false;
+}
+
+/**
+ * Re-save the latest state when the page is hidden or the WebView is torn
+ * down. Hard process kills (adb force-stop, APK-update kills) run no app
+ * code at all, but *backgrounding* does — and WebView localStorage commits
+ * are asynchronous, so re-issuing the write on hide closes the window in
+ * which a later kill can lose the most recent actions.
+ *
+ * Returns a cleanup function that removes the listeners.
+ */
+export function installLifecycleSaveFlush(
+  getSnapshot: () => PersistedGameState | null,
+  doc: Pick<Document, 'addEventListener' | 'removeEventListener' | 'visibilityState'> | null =
+    typeof document === 'undefined' ? null : document,
+  win: Pick<Window, 'addEventListener' | 'removeEventListener'> | null =
+    typeof window === 'undefined' ? null : window,
+): () => void {
+  if (!doc || !win) return () => {};
+  const flush = () => {
+    const snapshot = getSnapshot();
+    if (snapshot) saveGame(snapshot);
+  };
+  const onVisibilityChange = () => {
+    if (doc.visibilityState === 'hidden') flush();
+  };
+  doc.addEventListener('visibilitychange', onVisibilityChange);
+  win.addEventListener('pagehide', flush);
+  return () => {
+    doc.removeEventListener('visibilitychange', onVisibilityChange);
+    win.removeEventListener('pagehide', flush);
+  };
 }
 
 export function clearSave(): void {

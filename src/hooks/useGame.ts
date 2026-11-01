@@ -9,7 +9,7 @@ import { PLOTS } from '../game/plots';
 import { RESTORATION_TASKS, isTaskAvailable } from '../game/restoration';
 import { GARDEN_FEATURES } from '../game/garden';
 import { ENERGY_CONFIG } from '../game/energyConfig';
-import { loadGame, saveGame, clearSave } from '../storage';
+import { loadGame, saveGame, clearSave, installLifecycleSaveFlush } from '../storage';
 import type { Position } from '../game/types';
 
 export function useGame() {
@@ -28,6 +28,12 @@ export function useGame() {
     }
     saveGame(toPersisted(state));
   }, [state]);
+
+  // persist a final copy when the app is backgrounded/hidden, so a later
+  // hard process kill cannot roll back the most recent actions
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  useEffect(() => installLifecycleSaveFlush(() => toPersisted(stateRef.current)), []);
 
   // energy regeneration tick
   useEffect(() => {
@@ -98,6 +104,11 @@ export function useGame() {
     bump();
   }, [bump]);
 
+  // DEV-ONLY (temporary): debug "Refill Energy" button — see src/dev/devTools.ts
+  const devRefillEnergy = useCallback(() => {
+    dispatch({ type: 'DEV_REFILL_ENERGY', now: Date.now() });
+  }, []);
+
   const resetGame = useCallback(() => {
     if (typeof window !== 'undefined' && !window.confirm('Reset all progress and start fresh?')) return;
     clearSave();
@@ -140,6 +151,8 @@ export function useGame() {
     energy: state.energy,
     maxEnergy: ENERGY_CONFIG.maxEnergy,
     energyUpdatedAt: state.energyUpdatedAt,
+    // DEV-ONLY (temporary): debug refill button
+    devRefillEnergy,
     unlimited,
     setUnlimited,
     energyToast,
