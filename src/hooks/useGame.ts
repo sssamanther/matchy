@@ -7,6 +7,7 @@ import {
 import { findMergeHint } from '../game/board';
 import { PLOTS } from '../game/plots';
 import { RESTORATION_TASKS, isTaskAvailable } from '../game/restoration';
+import { GARDEN_FEATURES } from '../game/garden';
 import { ENERGY_CONFIG } from '../game/energyConfig';
 import { loadGame, saveGame, clearSave } from '../storage';
 import type { Position } from '../game/types';
@@ -116,6 +117,8 @@ export function useGame() {
     xp: state.xp,
     level: state.level,
     completedRestoration: state.completedRestoration,
+    gardenUnlocks: state.gardenUnlocks,
+    gardenFeatures: GARDEN_FEATURES,
     restorationTasks: RESTORATION_TASKS,
     isTaskAvailable,
     restoreTask,

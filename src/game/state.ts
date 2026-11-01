@@ -8,6 +8,7 @@ import {
 } from './board';
 import { PLOTS } from './plots';
 import { RESTORATION_TASKS, isTaskAvailable } from './restoration';
+import { computeUnlockedFeatures } from './garden';
 import { generateOrder, generateOrderSet, rewardFor, migrateOrders } from './orders';
 import { initialProgress, type Progress } from './progress';
 import { regenerateEnergy } from './energy';
@@ -31,6 +32,7 @@ export interface PersistedGameState {
   level?: number;
   completedRestoration?: string[];
   unlockedChains?: ChainId[];
+  gardenUnlocks?: string[];
 }
 
 export interface GameState extends PersistedGameState {
@@ -44,6 +46,7 @@ export interface GameState extends PersistedGameState {
   level: number;
   completedRestoration: string[];
   unlockedChains: ChainId[];
+  gardenUnlocks: string[];
 }
 
 export type GameAction =
@@ -106,6 +109,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     level: saved.level ?? 0,
     completedRestoration: saved.completedRestoration ?? [],
     unlockedChains: saved.unlockedChains ?? (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
+    gardenUnlocks: computeUnlockedFeatures((saved.completedRestoration ?? []).length, saved.gardenUnlocks ?? []),
     hint: null,
     sparkle: null,
     nudge: false,
@@ -126,6 +130,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     level: 0,
     completedRestoration: [],
     unlockedChains: (['frog', 'flower', 'mushroom', 'berry'] as ChainId[]),
+    gardenUnlocks: [],
     hint: null,
     sparkle: null,
     nudge: false,
@@ -147,6 +152,7 @@ function toPersisted(s: GameState): PersistedGameState {
     level: s.level,
     completedRestoration: s.completedRestoration,
     unlockedChains: s.unlockedChains,
+    gardenUnlocks: s.gardenUnlocks,
   };
 }
 
@@ -308,10 +314,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (state.completedRestoration.includes(task.id)) return state;
       if (!isTaskAvailable(task, state.completedRestoration)) return state;
       if (state.starBalance < task.cost) return state;
+      const newCompleted = [...state.completedRestoration, task.id];
       return {
         ...state,
         starBalance: state.starBalance - task.cost,
-        completedRestoration: [...state.completedRestoration, task.id],
+        completedRestoration: newCompleted,
+        gardenUnlocks: computeUnlockedFeatures(newCompleted.length, state.gardenUnlocks),
         xp: state.xp + task.cost,
       };
     }

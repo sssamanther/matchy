@@ -57,6 +57,14 @@ export default function App() {
       {screen === 'garden' && (
         <div style={{ marginTop: 12, padding: 12, border: '1px solid #ccc', borderRadius: 8 }}>
           <h3>Garden Restoration</h3>
+          <div style={{ marginBottom: 12 }}>
+            <strong>Features</strong>
+            {g.gardenFeatures.map((f) => (
+              <div key={f.id} style={{ fontSize: 12 }}>
+                {g.gardenUnlocks.includes(f.id) ? '✅' : '🔒'} {f.name} — {f.description}
+              </div>
+            ))}
+          </div>
           {g.restorationTasks.map((t) => {
             const done = g.completedRestoration.includes(t.id);
             const available = g.isTaskAvailable(t, g.completedRestoration);
