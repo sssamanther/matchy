@@ -31,7 +31,8 @@ export default function App() {
         @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.25); } 100% { transform: scale(1); } }
         .pop { animation: pop 0.3s ease; }
       `}</style>
-      <h1>Matchy 🌱</h1>
+      <h1>Little Winds</h1>
+      <div style={{ fontSize: 14, opacity: 0.7, marginBottom: 8 }}>A Cozy Merge Story</div>
       <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} />
       {import.meta.env.DEV && (
         <div style={{ marginBottom: 8, fontSize: 12 }}>
