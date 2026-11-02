@@ -20,10 +20,18 @@ const ITEM_ART: Partial<Record<ChainId, readonly string[]>> = {
     '/assets/items/flower-4-blossom.png',
     '/assets/items/flower-5-bouquet.png',
   ],
+  frog: [
+    '/assets/items/frog-1-tadpole.png',
+    '/assets/items/frog-2-froglet.png',
+    '/assets/items/frog-3-frog.png',
+    '/assets/items/frog-4-pond-frog.png',
+    '/assets/items/frog-5-frog-prince.png',
+  ],
 };
 
 const GENERATOR_ART: Partial<Record<ChainId, string>> = {
   flower: '/assets/generators/flower.png',
+  frog: '/assets/generators/frog.png',
 };
 
 /**

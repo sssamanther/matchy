@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generatorArt, itemArt } from './art';
-import { CHAIN_EMOJI, CHAIN_TIER_COUNT, CHAIN_TIER_LABELS, CHAINS } from './types';
+import { CHAIN_EMOJI, CHAIN_TIER_COUNT, CHAIN_TIER_LABELS, CHAINS, generatorName } from './types';
 
 const FLOWER_TIER_ART: Array<{ tier: number; path: string; name: string }> = [
   { tier: 1, path: '/assets/items/flower-1-seed.png', name: 'Seed' },
@@ -9,6 +9,36 @@ const FLOWER_TIER_ART: Array<{ tier: number; path: string; name: string }> = [
   { tier: 4, path: '/assets/items/flower-4-blossom.png', name: 'Blossom' },
   { tier: 5, path: '/assets/items/flower-5-bouquet.png', name: 'Bouquet' },
 ];
+
+const FROG_TIER_ART: Array<{ tier: number; path: string; name: string }> = [
+  { tier: 1, path: '/assets/items/frog-1-tadpole.png', name: 'Tadpole' },
+  { tier: 2, path: '/assets/items/frog-2-froglet.png', name: 'Froglet' },
+  { tier: 3, path: '/assets/items/frog-3-frog.png', name: 'Frog' },
+  { tier: 4, path: '/assets/items/frog-4-pond-frog.png', name: 'Pond Frog' },
+  { tier: 5, path: '/assets/items/frog-5-frog-prince.png', name: 'Frog Prince' },
+];
+
+describe('frog artwork mapping (chain + tier)', () => {
+  it('maps every frog tier to its exact illustration', () => {
+    for (const { tier, path } of FROG_TIER_ART) {
+      expect(itemArt('frog', tier)).toBe(path);
+    }
+  });
+
+  it('maps the frog generator to its illustration', () => {
+    expect(generatorArt('frog')).toBe('/assets/generators/frog.png');
+  });
+
+  it('uses the exact five frog display names', () => {
+    expect(CHAIN_TIER_LABELS.frog).toEqual(['Tadpole', 'Froglet', 'Frog', 'Pond Frog', 'Frog Prince']);
+  });
+
+  it('names the frog generator "Frog Pond" and keeps generic names elsewhere', () => {
+    expect(generatorName('frog')).toBe('Frog Pond');
+    expect(generatorName('flower')).toBe('flower generator');
+    expect(generatorName('mushroom')).toBe('mushroom generator');
+  });
+});
 
 describe('flower artwork mapping (chain + tier)', () => {
   it('maps every flower tier to its exact illustration', () => {
@@ -38,7 +68,7 @@ describe('flower display names', () => {
 describe('emoji fallbacks for chains without artwork', () => {
   it('returns null for every tier of unillustrated chains', () => {
     for (const chain of CHAINS) {
-      if (chain === 'flower') continue;
+      if (chain === 'flower' || chain === 'frog') continue;
       for (let tier = 1; tier <= CHAIN_TIER_COUNT; tier++) {
         expect(itemArt(chain, tier)).toBeNull();
       }

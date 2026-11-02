@@ -20,9 +20,22 @@ export const CHAIN_EMOJI: Record<ChainId, string> = {
   woodland: '🦉',
 };
 
+/**
+ * Display names for chain generators (accessibility labels / future UI).
+ * Chains without an entry fall back to a generic "<chain> generator" name.
+ */
+export const GENERATOR_NAMES: Partial<Record<ChainId, string>> = {
+  frog: 'Frog Pond',
+};
+
+/** Generator display name for a chain. */
+export function generatorName(chain: ChainId): string {
+  return GENERATOR_NAMES[chain] ?? `${chain} generator`;
+}
+
 /** Human-readable tier labels per chain (index 0 = tier 1). */
 export const CHAIN_TIER_LABELS: Record<ChainId, readonly string[]> = {
-  frog: ['tadpole', 'big tadpole', 'froglet', 'frog', 'Frog Prince'],
+  frog: ['Tadpole', 'Froglet', 'Frog', 'Pond Frog', 'Frog Prince'],
   flower: ['Seed', 'Sprout', 'Bud', 'Blossom', 'Bouquet'],
   mushroom: ['spore', 'button', 'shroom', 'cap', 'Glowing Shroom'],
   berry: ['sprig', 'blossom', 'green berry', 'ripe berry', 'Berry Basket'],

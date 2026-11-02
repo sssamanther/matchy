@@ -1,6 +1,6 @@
 import Art from './Art';
 import { generatorArt } from '../game/art';
-import { CHAIN_EMOJI } from '../game/types';
+import { CHAIN_EMOJI, generatorName } from '../game/types';
 import type { ChainId } from '../game/types';
 import { useRef } from 'react';
 
@@ -26,7 +26,7 @@ export default function Generator({ chain, onTap }: { chain: ChainId; onTap: () 
     >
       <Art
         src={generatorArt(chain)}
-        alt={`${chain} generator`}
+        alt={generatorName(chain)}
         emoji={CHAIN_EMOJI[chain]}
         style={{ width: '100%', height: '100%' }}
       />
