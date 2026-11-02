@@ -23,7 +23,7 @@ export const CHAIN_EMOJI: Record<ChainId, string> = {
 /** Human-readable tier labels per chain (index 0 = tier 1). */
 export const CHAIN_TIER_LABELS: Record<ChainId, readonly string[]> = {
   frog: ['tadpole', 'big tadpole', 'froglet', 'frog', 'Frog Prince'],
-  flower: ['seed', 'sprout', 'bud', 'bloom', 'Grand Bloom'],
+  flower: ['Seed', 'Sprout', 'Bud', 'Blossom', 'Bouquet'],
   mushroom: ['spore', 'button', 'shroom', 'cap', 'Glowing Shroom'],
   berry: ['sprig', 'blossom', 'green berry', 'ripe berry', 'Berry Basket'],
   plant: ['seedling', 'sapling', 'plant', 'bush', 'Grand Tree'],

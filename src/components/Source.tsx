@@ -1,3 +1,5 @@
+import Art from './Art';
+import { generatorArt } from '../game/art';
 import { CHAIN_EMOJI } from '../game/types';
 import type { ChainId } from '../game/types';
 
@@ -13,9 +15,16 @@ export default function Source({ chain, onTap }: { chain: ChainId; onTap: () => 
         border: '2px solid #81c784',
         background: '#f1f8e9',
         cursor: 'pointer',
+        padding: 4,
+        boxSizing: 'border-box',
       }}
     >
-      {CHAIN_EMOJI[chain]}
+      <Art
+        src={generatorArt(chain)}
+        alt={`${chain} generator`}
+        emoji={CHAIN_EMOJI[chain]}
+        style={{ width: '100%', height: '100%' }}
+      />
     </button>
   );
 }
