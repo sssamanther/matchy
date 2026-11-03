@@ -8,14 +8,20 @@ export default function Board({
   board,
   nudge,
   hint,
+  selected,
   onDrop,
   onGeneratorTap,
+  onTap,
 }: {
   board: BoardType;
   nudge: boolean;
   hint: { a: Position; b: Position } | null;
+  /** Cell holding the currently selected item (subtle outline highlight). */
+  selected: Position | null;
   onDrop: (from: Position, to: Position) => void;
   onGeneratorTap: (pos: Position) => void;
+  /** Tap on a cell (no drag): selects a regular item, clears on empty tiles. */
+  onTap: (pos: Position) => void;
 }) {
   const dragFrom = useRef<Position | null>(null);
   const [hover, setHover] = useState<Position | null>(null);
@@ -57,11 +63,16 @@ export default function Board({
       {board.map((row, r) =>
         row.map((cell, c) => {
           const isHover = !!hover && hover.row === r && hover.col === c;
+          const isSelected = !!selected && selected.row === r && selected.col === c;
           return (
             <div
               key={`${r}-${c}`}
               data-row={r}
               data-col={c}
+              // Tap on an empty tile clears the selection. pointerup (not
+              // click): item drags hold pointer capture on their own wrapper,
+              // so an empty cell can never see a drag's pointerup.
+              onPointerUp={cell ? undefined : () => onTap({ row: r, col: c })}
               style={{
                 width: '100%',
                 aspectRatio: '1 / 1',
@@ -73,6 +84,8 @@ export default function Board({
                     : '#fff',
                 borderRadius: 8,
                 border: '1px solid #c8e6c9',
+                // Subtle selection outline (box-shadow: no layout shift).
+                boxShadow: isSelected ? '0 0 0 2px #ffb74d' : 'none',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -97,8 +110,15 @@ export default function Board({
                     onPointerUp={(e) => {
                       if (!dragFrom.current) { clearDrag(); return; }
                       const target = cellAt(e.clientX, e.clientY) ?? hover;
-                      if (target && !(target.row === dragFrom.current.row && target.col === dragFrom.current.col)) {
-                        onDrop(dragFrom.current, target);
+                      if (target) {
+                        const from = dragFrom.current;
+                        if (target.row === from.row && target.col === from.col) {
+                          // Released on its own cell: a tap — select, no gameplay.
+                          onTap(target);
+                        } else {
+                          // Moved to another cell: drag — merge/move as before.
+                          onDrop(from, target);
+                        }
                       }
                       clearDrag();
                     }}

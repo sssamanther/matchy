@@ -25,30 +25,46 @@ const FLOWER_TIERS: Array<{ tier: number; path: string; name: string }> = [
 ];
 
 describe('merge board items', () => {
-  it('renders every flower tier with its own illustration, name and tier badge', () => {
+  it('renders every flower tier with its own illustration, name and tier tooltip', () => {
     for (const { tier, path, name } of FLOWER_TIERS) {
       const html = renderToStaticMarkup(<Item item={{ id: tier, chain: 'flower', tier }} />);
       expect(html, `tier ${tier}`).toContain(`src="${path}"`);
       expect(html, `tier ${tier}`).toContain(`alt="${name}"`);
-      expect(html, `tier ${tier}`).toContain(`title="${name}"`);
-      expect(html, `tier ${tier}`).toContain(`>${tier}</span>`); // tier badge preserved
+      expect(html, `tier ${tier}`).toContain(`title="${name} (tier ${tier})"`); // tier info kept in tooltip
     }
   });
 
   it('keeps non-illustrated chains on their emoji fallback', () => {
-    const html = renderToStaticMarkup(<Item item={{ id: 9, chain: 'mushroom', tier: 3 }} />);
+    const html = renderToStaticMarkup(<Item item={{ id: 9, chain: 'woodland', tier: 3 }} />);
     expect(html).not.toContain('<img');
-    expect(html).toContain('\u{1F344}'); // mushroom emoji
-    expect(html).toContain('aria-label="shroom"');
-    expect(html).toContain('>3</span>');
+    expect(html).toContain('\u{1F989}'); // owl emoji
+    expect(html).toContain('aria-label="bird"');
+    expect(html).toContain('title="bird (tier 3)"'); // tier kept in metadata
   });
 
   it('never gives a Berry item flower artwork (shared "Blossom" name)', () => {
     const html = renderToStaticMarkup(<Item item={{ id: 10, chain: 'berry', tier: 2 }} />);
     expect(html).not.toContain('<img');
     expect(html).toContain('🫐');
-    expect(html).toContain('title="blossom"'); // berry's own name, unchanged
+    expect(html).toContain('title="blossom (tier 2)"'); // berry's own name, unchanged
     expect(html).not.toContain('flower-4-blossom.png');
+  });
+
+  it('shows no visible tier badge and fills ~88% of the tile with centred artwork', () => {
+    // illustrated item: larger art area, tier info moved into the tooltip
+    const img = renderToStaticMarkup(<Item item={{ id: 11, chain: 'flower', tier: 4 }} />);
+    expect(img).not.toContain('font-size:10px'); // old badge styling gone
+    expect(img).toContain('width:88%;height:88%');
+    expect(img).toContain('object-fit:contain');
+    expect(img).toContain('title="Blossom (tier 4)"');
+    // emoji fallback: still centred, no badge, tier info in tooltip
+    const emoji = renderToStaticMarkup(<Item item={{ id: 12, chain: 'woodland', tier: 3 }} />);
+    expect(emoji).not.toContain('font-size:10px');
+    expect(emoji).toContain('width:88%;height:88%');
+    expect(emoji).toContain('align-items:center');
+    expect(emoji).toContain('justify-content:center');
+    expect(emoji).toContain('title="bird (tier 3)"');
+    expect(emoji).toContain('\u{1F989}');
   });
 });
 
@@ -61,8 +77,8 @@ describe('generator and source controls', () => {
   });
 
   it('keeps the emoji for chains without generator artwork', () => {
-    expect(renderToStaticMarkup(<Generator chain="plant" onTap={() => {}} />)).toContain('\u{1F33F}');
-    expect(renderToStaticMarkup(<Source chain="mushroom" onTap={() => {}} />)).toContain('\u{1F344}');
+    expect(renderToStaticMarkup(<Generator chain="berry" onTap={() => {}} />)).toContain('🫐');
+    expect(renderToStaticMarkup(<Source chain="woodland" onTap={() => {}} />)).toContain('\u{1F989}');
   });
 });
 
@@ -75,13 +91,12 @@ const FROG_TIERS: Array<{ tier: number; path: string; name: string }> = [
 ];
 
 describe('frog artwork integration', () => {
-  it('renders every frog tier with its own illustration, name and tier badge', () => {
+  it('renders every frog tier with its own illustration, name and tier tooltip', () => {
     for (const { tier, path, name } of FROG_TIERS) {
       const html = renderToStaticMarkup(<Item item={{ id: 100 + tier, chain: 'frog', tier }} />);
       expect(html, `tier ${tier}`).toContain(`src="${path}"`);
       expect(html, `tier ${tier}`).toContain(`alt="${name}"`);
-      expect(html, `tier ${tier}`).toContain(`title="${name}"`);
-      expect(html, `tier ${tier}`).toContain(`>${tier}</span>`); // tier badge preserved
+      expect(html, `tier ${tier}`).toContain(`title="${name} (tier ${tier})"`); // tier info kept in tooltip
     }
   });
 
@@ -142,6 +157,59 @@ describe('frog artwork integration', () => {
     expect(html).toContain('Pond Frog');
     // and the round trip through storage still works unchanged
     expect(toPersisted(loaded).orders).toEqual(saved.orders);
+  });
+});
+
+const MUSHROOM_TIERS: Array<{ tier: number; path: string; name: string }> = [
+  { tier: 1, path: '/assets/items/mushroom-1-spore.png', name: 'Spore' },
+  { tier: 2, path: '/assets/items/mushroom-2-toadstool.png', name: 'Toadstool' },
+  { tier: 3, path: '/assets/items/mushroom-3-spotted-mushroom.png', name: 'Spotted Mushroom' },
+  { tier: 4, path: '/assets/items/mushroom-4-forest-mushroom.png', name: 'Forest Mushroom' },
+  { tier: 5, path: '/assets/items/mushroom-5-glowing-mushroom.png', name: 'Glowing Mushroom' },
+];
+
+describe('mushroom artwork integration', () => {
+  it('renders every mushroom tier with its own illustration, name and tier tooltip', () => {
+    for (const { tier, path, name } of MUSHROOM_TIERS) {
+      const html = renderToStaticMarkup(<Item item={{ id: 300 + tier, chain: 'mushroom', tier }} />);
+      expect(html, `tier ${tier}`).toContain(`src="${path}"`);
+      expect(html, `tier ${tier}`).toContain(`alt="${name}"`);
+      expect(html, `tier ${tier}`).toContain(`title="${name} (tier ${tier})"`); // tier info kept in tooltip
+    }
+  });
+
+  it('shows the Mushroom Stump generator illustration with its display name', () => {
+    const gen = renderToStaticMarkup(<Generator chain="mushroom" onTap={() => {}} />);
+    expect(gen).toContain('src="/assets/generators/mushroom.png"');
+    expect(gen).toContain('alt="Mushroom Stump"');
+    const src = renderToStaticMarkup(<Source chain="mushroom" onTap={() => {}} />);
+    expect(src).toContain('src="/assets/generators/mushroom.png"');
+    expect(src).toContain('alt="Mushroom Stump"');
+  });
+
+  it('shows mushroom illustrations and names in compact order cards', () => {
+    const order: Order = {
+      id: 8,
+      requirements: [
+        { chain: 'mushroom', tier: 1, count: 2 },
+        { chain: 'mushroom', tier: 4, count: 1 },
+        { chain: 'mushroom', tier: 5, count: 1 },
+      ],
+    };
+    const html = renderToStaticMarkup(<OrderPanel orders={[order]} board={EMPTY_BOARD} onServe={() => {}} />);
+    expect(html).toContain('src="/assets/items/mushroom-1-spore.png"');
+    expect(html).toContain('src="/assets/items/mushroom-4-forest-mushroom.png"');
+    expect(html).toContain('src="/assets/items/mushroom-5-glowing-mushroom.png"');
+    expect(html).toContain('>Spore<');
+    expect(html).toContain('>Forest Mushroom<');
+    expect(html).toContain('>Glowing Mushroom<');
+  });
+
+  it('flower and frog artwork remain unchanged alongside mushroom', () => {
+    expect(renderToStaticMarkup(<Item item={{ id: 400, chain: 'flower', tier: 4 }} />))
+      .toContain('src="/assets/items/flower-4-blossom.png"');
+    expect(renderToStaticMarkup(<Item item={{ id: 401, chain: 'frog', tier: 4 }} />))
+      .toContain('src="/assets/items/frog-4-pond-frog.png"');
   });
 });
 

@@ -13,8 +13,17 @@ import { generateOrder, generateOrderSet, rewardFor, migrateOrders, reconcileOrd
 import { initialProgress, levelFromXp, type Progress } from './progress';
 import { regenerateEnergy, refillEnergy } from './energy';
 import { ENERGY_CONFIG } from './energyConfig';
-import { CHAIN_TIER_COUNT } from './types';
-import type { Board, ChainId, Order, Position, Plot } from './types';
+import {
+  STORAGE_BASE_CAPACITY,
+  createStorage,
+  firstFreeSlot,
+  isStorable,
+  normalizeCapacity,
+  normalizeStorage,
+  type StorageSlots,
+} from './inventory';
+import { CHAIN_TIER_COUNT, isItem } from './types';
+import type { Board, Cell, ChainId, Item, Order, Position, Plot } from './types';
 
 export const SAVE_VERSION = 1;
 
@@ -35,12 +44,24 @@ export interface PersistedGameState {
   pendingGenerators?: ChainId[];
   gardenUnlocks?: string[];
   selectedGoalId?: string | null;
+  /** Storage inventory slots (optional — legacy saves hydrate to empty storage). */
+  storageSlots?: (Item | null)[];
+  /** Storage capacity; fixed at 8 for now (upgrades arrive as a separate feature). */
+  storageCapacity?: number;
 }
 
 export interface GameState extends PersistedGameState {
   hint: { a: Position; b: Position } | null;
   sparkle: Position | null;
   nudge: boolean;
+  /**
+   * Transient UI selection of a board item: the cell plus the item's stable
+   * id, so any action that moves/merges/stores/removes the item can detect
+   * it centrally. Never persisted (like hint/sparkle/nudge).
+   */
+  selected: { pos: Position; id: number } | null;
+  storageSlots: StorageSlots;
+  storageCapacity: number;
   energy: number;
   energyUpdatedAt: number;
   starBalance: number;
@@ -63,6 +84,9 @@ export type GameAction =
   | { type: 'RESTORE_TASK'; taskId: string }
   | { type: 'SELECT_GOAL'; goalId: string | null }
   | { type: 'DROP'; from: Position; to: Position }
+  | { type: 'SELECT_CELL'; pos: Position }
+  | { type: 'STORE_ITEM'; pos: Position }
+  | { type: 'RETRIEVE_ITEM'; index: number }
   | { type: 'SERVE_ORDER'; orderId: number }
   | { type: 'NEXT_PLOT' }
   | { type: 'SELECT_PLOT'; index: number }
@@ -165,6 +189,8 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     // build may carry a stale/absent level field.
     const xpLevel = levelFromXp(saved.xp ?? 0);
     const level = Math.max(saved.level && saved.level > 0 ? saved.level : 0, xpLevel);
+    // Optional storage fields: legacy saves simply hydrate to empty storage.
+    const storageCapacity = normalizeCapacity(saved.storageCapacity);
     const base: GameState = {
       version: SAVE_VERSION,
       plotIndex: saved.plotIndex,
@@ -185,6 +211,9 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       pendingGenerators: saved.pendingGenerators ?? [],
       gardenUnlocks: computeUnlockedFeatures((saved.completedRestoration ?? []).length, saved.gardenUnlocks ?? []),
       selectedGoalId: saved.selectedGoalId ?? null,
+      storageCapacity,
+      storageSlots: normalizeStorage(saved.storageSlots, storageCapacity),
+      selected: null,
       hint: null,
       sparkle: null,
       nudge: false,
@@ -223,6 +252,9 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     pendingGenerators: [],
     gardenUnlocks: [],
     selectedGoalId: null,
+    storageCapacity: STORAGE_BASE_CAPACITY,
+    storageSlots: createStorage(STORAGE_BASE_CAPACITY),
+    selected: null,
     hint: null,
     sparkle: null,
     nudge: false,
@@ -247,12 +279,14 @@ function toPersisted(s: GameState): PersistedGameState {
     pendingGenerators: s.pendingGenerators,
     gardenUnlocks: s.gardenUnlocks,
     selectedGoalId: s.selectedGoalId,
+    storageSlots: s.storageSlots,
+    storageCapacity: s.storageCapacity,
   };
 }
 
 export { toPersisted };
 
-export function gameReducer(state: GameState, action: GameAction): GameState {
+function reduceAction(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'HYDRATE':
       return action.state;
@@ -277,6 +311,55 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       // A move/merge frees a cell — deliver any pending generator unlock.
       return flushPendingGenerators(next);
+    }
+
+    case 'SELECT_CELL': {
+      const cell: Cell | null = state.board[action.pos.row]?.[action.pos.col] ?? null;
+      // Only regular items are selectable. Empty tiles — and anything that is
+      // not a storable item — clear the current selection instead.
+      if (!isStorable(cell)) {
+        return state.selected === null ? state : { ...state, selected: null };
+      }
+      const sel = state.selected;
+      if (
+        sel &&
+        sel.pos.row === action.pos.row &&
+        sel.pos.col === action.pos.col &&
+        sel.id === cell.id
+      ) {
+        return state; // re-tapping the already-selected item is a no-op
+      }
+      return { ...state, selected: { pos: { row: action.pos.row, col: action.pos.col }, id: cell.id } };
+    }
+
+    case 'STORE_ITEM': {
+      const cell: Cell | null = state.board[action.pos.row]?.[action.pos.col] ?? null;
+      // Regular items only: generators, sources and empty cells are refused
+      // with the board left completely untouched.
+      if (!isStorable(cell)) return state;
+      const index = firstFreeSlot(state.storageSlots);
+      // Storage full: refuse the action — the item stays safely on the board.
+      if (index === -1) return state;
+      const slots = state.storageSlots.slice();
+      slots[index] = cell; // same object: chain/tier/id all preserved
+      const board = state.board.map((row) => row.slice());
+      board[action.pos.row][action.pos.col] = null;
+      // The item left the board, so the selection wrapper clears `selected`.
+      return { ...state, board, storageSlots: slots };
+    }
+
+    case 'RETRIEVE_ITEM': {
+      const slot = state.storageSlots[action.index] ?? null;
+      if (!slot) return state; // empty or out-of-range slot: no-op
+      // Deterministic placement: first free tile in row-major order.
+      const dest = findEmptyCell(state.board);
+      // Board full: refuse the action — the item stays safely in storage.
+      if (!dest) return state;
+      const board = state.board.map((row) => row.slice());
+      board[dest.row][dest.col] = slot; // same object: identity preserved
+      const slots = state.storageSlots.slice();
+      slots[action.index] = null;
+      return { ...state, board, storageSlots: slots };
     }
 
     case 'SERVE_ORDER': {
@@ -363,6 +446,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         hint: null,
         sparkle: null,
         nudge: false,
+        selected: null,
       };
     }
 
@@ -379,6 +463,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         hint: null,
         sparkle: null,
         nudge: false,
+        selected: null,
       };
     }
 
@@ -463,6 +548,25 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     default:
       return state;
   }
+}
+
+/**
+ * Selection tracks one *specific* item at one board cell. Whenever an action
+ * leaves that cell empty or holding a different id — the item was moved,
+ * merged, stored, served or otherwise removed — the selection is cleared.
+ * Applying this centrally means no individual action can forget to, and it
+ * can never point at the wrong item.
+ */
+function reconcileSelection(state: GameState): GameState {
+  const sel = state.selected;
+  if (!sel) return state;
+  const cell: Cell | null = state.board[sel.pos.row]?.[sel.pos.col] ?? null;
+  if (cell !== null && isItem(cell) && cell.id === sel.id) return state;
+  return { ...state, selected: null };
+}
+
+export function gameReducer(state: GameState, action: GameAction): GameState {
+  return reconcileSelection(reduceAction(state, action));
 }
 
 // re-export for convenience

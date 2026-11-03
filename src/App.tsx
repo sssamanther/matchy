@@ -6,6 +6,8 @@ import OrderPanel from './components/OrderPanel';
 import EnergyBar from './components/EnergyBar';
 import Sparkles from './components/Sparkles';
 import PlotSelect from './components/PlotSelect';
+import ItemInfoBar from './components/ItemInfoBar';
+import StorageView from './components/StorageView';
 
 function formatCountdown(updatedAt: number): string {
   const remaining = Math.max(0, 60000 - (Date.now() - updatedAt));
@@ -17,7 +19,7 @@ function formatCountdown(updatedAt: number): string {
 
 export default function App() {
   const g = useGame();
-  const [screen, setScreen] = useState<'play' | 'garden' | 'plots'>('play');
+  const [screen, setScreen] = useState<'play' | 'garden' | 'plots' | 'storage'>('play');
   const [levelUp, setLevelUp] = useState(false);
   const [starReward, setStarReward] = useState<number | null>(null);
   const prevLevel = useRef(g.level);
@@ -99,13 +101,34 @@ export default function App() {
         <OrderPanel orders={g.orders} board={g.board} onServe={g.serveOrder} />
       </div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 8 }}>
-        <Board board={g.board} nudge={g.nudge} hint={g.hint} onDrop={g.handleDrop} onGeneratorTap={g.tapGenerator} />
+        <Board
+          board={g.board}
+          nudge={g.nudge}
+          hint={g.hint}
+          selected={g.selected?.pos ?? null}
+          onDrop={g.handleDrop}
+          onGeneratorTap={g.tapGenerator}
+          onTap={g.selectCell}
+        />
         <Sparkles pos={g.sparkle} />
       </div>
+      {g.selectedItem && (
+        <ItemInfoBar item={g.selectedItem} storageFull={g.storageFull} onStore={g.storeSelected} />
+      )}
       <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
         <button onClick={() => setScreen('play')} style={{ flex: 1 }}>🧩 Board</button>
+        <button onClick={() => setScreen('storage')} style={{ flex: 1 }}>📦 Storage</button>
         <button onClick={() => setScreen('garden')} style={{ flex: 1 }}>🌿 Garden</button>
       </div>
+      {screen === 'storage' && (
+        <StorageView
+          slots={g.storageSlots}
+          capacity={g.storageCapacity}
+          boardFull={g.boardFull}
+          onRetrieve={g.retrieveItem}
+          onBack={() => setScreen('play')}
+        />
+      )}
       {screen === 'garden' && (
         <div style={{ position: 'fixed', inset: 0, background: '#fff', padding: 16, overflowY: 'auto', zIndex: 100 }}>
           <h3>Garden Restoration</h3>

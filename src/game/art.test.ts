@@ -18,6 +18,14 @@ const FROG_TIER_ART: Array<{ tier: number; path: string; name: string }> = [
   { tier: 5, path: '/assets/items/frog-5-frog-prince.png', name: 'Frog Prince' },
 ];
 
+const MUSHROOM_TIER_ART: Array<{ tier: number; path: string; name: string }> = [
+  { tier: 1, path: '/assets/items/mushroom-1-spore.png', name: 'Spore' },
+  { tier: 2, path: '/assets/items/mushroom-2-toadstool.png', name: 'Toadstool' },
+  { tier: 3, path: '/assets/items/mushroom-3-spotted-mushroom.png', name: 'Spotted Mushroom' },
+  { tier: 4, path: '/assets/items/mushroom-4-forest-mushroom.png', name: 'Forest Mushroom' },
+  { tier: 5, path: '/assets/items/mushroom-5-glowing-mushroom.png', name: 'Glowing Mushroom' },
+];
+
 describe('frog artwork mapping (chain + tier)', () => {
   it('maps every frog tier to its exact illustration', () => {
     for (const { tier, path } of FROG_TIER_ART) {
@@ -36,7 +44,33 @@ describe('frog artwork mapping (chain + tier)', () => {
   it('names the frog generator "Frog Pond" and keeps generic names elsewhere', () => {
     expect(generatorName('frog')).toBe('Frog Pond');
     expect(generatorName('flower')).toBe('flower generator');
-    expect(generatorName('mushroom')).toBe('mushroom generator');
+    expect(generatorName('plant')).toBe('Potting Bench');
+  });
+});
+
+describe('mushroom artwork mapping (chain + tier)', () => {
+  it('maps every mushroom tier to its exact illustration', () => {
+    for (const { tier, path } of MUSHROOM_TIER_ART) {
+      expect(itemArt('mushroom', tier)).toBe(path);
+    }
+  });
+
+  it('maps the mushroom generator to its illustration', () => {
+    expect(generatorArt('mushroom')).toBe('/assets/generators/mushroom.png');
+  });
+
+  it('uses the exact five mushroom display names', () => {
+    expect(CHAIN_TIER_LABELS.mushroom).toEqual([
+      'Spore',
+      'Toadstool',
+      'Spotted Mushroom',
+      'Forest Mushroom',
+      'Glowing Mushroom',
+    ]);
+  });
+
+  it('names the mushroom generator "Mushroom Stump"', () => {
+    expect(generatorName('mushroom')).toBe('Mushroom Stump');
   });
 });
 
@@ -68,7 +102,12 @@ describe('flower display names', () => {
 describe('emoji fallbacks for chains without artwork', () => {
   it('returns null for every tier of unillustrated chains', () => {
     for (const chain of CHAINS) {
-      if (chain === 'flower' || chain === 'frog') continue;
+      if (
+        chain === 'flower' ||
+        chain === 'frog' ||
+        chain === 'mushroom' ||
+        chain === 'plant'
+      ) continue;
       for (let tier = 1; tier <= CHAIN_TIER_COUNT; tier++) {
         expect(itemArt(chain, tier)).toBeNull();
       }

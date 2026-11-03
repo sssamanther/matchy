@@ -27,11 +27,27 @@ const ITEM_ART: Partial<Record<ChainId, readonly string[]>> = {
     '/assets/items/frog-4-pond-frog.png',
     '/assets/items/frog-5-frog-prince.png',
   ],
+  mushroom: [
+    '/assets/items/mushroom-1-spore.png',
+    '/assets/items/mushroom-2-toadstool.png',
+    '/assets/items/mushroom-3-spotted-mushroom.png',
+    '/assets/items/mushroom-4-forest-mushroom.png',
+    '/assets/items/mushroom-5-glowing-mushroom.png',
+  ],
+  plant: [
+  '/assets/items/plant-1-leaf-cutting.png',
+  '/assets/items/plant-2-young-potted-plant.png',
+  '/assets/items/plant-3-potted-plant.png',
+  '/assets/items/plant-4-lush-houseplant.png',
+  '/assets/items/plant-5-majestic-monstera.png',
+  ],
 };
 
 const GENERATOR_ART: Partial<Record<ChainId, string>> = {
   flower: '/assets/generators/flower.png',
   frog: '/assets/generators/frog.png',
+  mushroom: '/assets/generators/mushroom.png',
+  plant: '/assets/generators/plant.png',
 };
 
 /**

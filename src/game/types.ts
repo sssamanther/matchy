@@ -26,6 +26,8 @@ export const CHAIN_EMOJI: Record<ChainId, string> = {
  */
 export const GENERATOR_NAMES: Partial<Record<ChainId, string>> = {
   frog: 'Frog Pond',
+  mushroom: 'Mushroom Stump',
+  plant: 'Potting Bench',
 };
 
 /** Generator display name for a chain. */
@@ -37,9 +39,9 @@ export function generatorName(chain: ChainId): string {
 export const CHAIN_TIER_LABELS: Record<ChainId, readonly string[]> = {
   frog: ['Tadpole', 'Froglet', 'Frog', 'Pond Frog', 'Frog Prince'],
   flower: ['Seed', 'Sprout', 'Bud', 'Blossom', 'Bouquet'],
-  mushroom: ['spore', 'button', 'shroom', 'cap', 'Glowing Shroom'],
+  mushroom: ['Spore', 'Toadstool', 'Spotted Mushroom', 'Forest Mushroom', 'Glowing Mushroom'],
   berry: ['sprig', 'blossom', 'green berry', 'ripe berry', 'Berry Basket'],
-  plant: ['seedling', 'sapling', 'plant', 'bush', 'Grand Tree'],
+  plant: ['Leaf Cutting', 'Young Potted Plant', 'Potted Plant', 'Lush Houseplant', 'Majestic Monstera'],
   tool: ['rusty tool', 'tool', 'fine tool', 'master tool', 'Golden Tool'],
   woodland: ['feather', 'nest', 'bird', 'owl', 'Grand Owl'],
 };

@@ -1,4 +1,5 @@
 import { SAVE_VERSION, type PersistedGameState } from './game/state';
+import { isStorageSlots } from './game/inventory';
 
 const KEY = 'matchy:save';
 
@@ -57,6 +58,10 @@ function isValidPersisted(v: unknown): v is PersistedGameState {
   if (!o.unlockedPlots.every((n) => typeof n === 'number')) return false;
   if (o.energy !== undefined && typeof o.energy !== 'number') return false;
   if (o.energyUpdatedAt !== undefined && typeof o.energyUpdatedAt !== 'number') return false;
+  // Storage inventory (optional — absent on legacy saves; hydration then
+  // defaults to empty storage at STORAGE_BASE_CAPACITY slots).
+  if (o.storageCapacity !== undefined && typeof o.storageCapacity !== 'number') return false;
+  if (o.storageSlots !== undefined && !isStorageSlots(o.storageSlots)) return false;
   return true;
 }
 

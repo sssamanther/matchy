@@ -4,13 +4,14 @@ import {
   gameReducer,
   toPersisted,
 } from '../game/state';
-import { findMergeHint } from '../game/board';
+import { findMergeHint, isFull } from '../game/board';
+import { countStored, isStorageFull } from '../game/inventory';
 import { PLOTS } from '../game/plots';
 import { RESTORATION_TASKS, isTaskAvailable } from '../game/restoration';
 import { GARDEN_FEATURES } from '../game/garden';
 import { ENERGY_CONFIG } from '../game/energyConfig';
 import { loadGame, saveGame, clearSave, installLifecycleSaveFlush } from '../storage';
-import type { Position } from '../game/types';
+import { isItem, type Item, type Position } from '../game/types';
 
 export function useGame() {
   const initial = createInitialState(loadGame());
@@ -79,6 +80,24 @@ export function useGame() {
     bump();
   }, [bump]);
 
+  // Tap-to-select (Board taps); the reducer ignores generators and clears
+  // the selection on empty tiles.
+  const selectCell = useCallback((pos: Position) => {
+    dispatch({ type: 'SELECT_CELL', pos });
+    bump();
+  }, [bump]);
+
+  const storeSelected = useCallback(() => {
+    if (!state.selected) return;
+    dispatch({ type: 'STORE_ITEM', pos: state.selected.pos });
+    bump();
+  }, [bump, state.selected]);
+
+  const retrieveItem = useCallback((index: number) => {
+    dispatch({ type: 'RETRIEVE_ITEM', index });
+    bump();
+  }, [bump]);
+
   const serveOrder = useCallback((orderId: number) => {
     dispatch({ type: 'SERVE_ORDER', orderId });
     bump();
@@ -130,6 +149,15 @@ export function useGame() {
     return () => clearTimeout(t);
   }, [state.sparkle]);
 
+  // Selected item for the info bar: only resolves while the recorded cell
+  // still holds that exact item (the reducer also clears stale selections).
+  const selectedItem: Item | null = (() => {
+    const sel = state.selected;
+    if (!sel) return null;
+    const cell = state.board[sel.pos.row]?.[sel.pos.col];
+    return cell && isItem(cell) && cell.id === sel.id ? cell : null;
+  })();
+
   return {
     plot: PLOTS[state.plotIndex],
     plotIndex: state.plotIndex,
@@ -161,6 +189,18 @@ export function useGame() {
     sparkle: state.sparkle,
     unlockedPlots: state.unlockedPlots,
     handleDrop,
+    // selection (UI-only, transient)
+    selected: state.selected,
+    selectedItem,
+    selectCell,
+    // storage inventory
+    storageSlots: state.storageSlots,
+    storageCapacity: state.storageCapacity,
+    storageUsed: countStored(state.storageSlots),
+    storageFull: isStorageFull(state.storageSlots),
+    boardFull: isFull(state.board),
+    storeSelected,
+    retrieveItem,
     tapSource,
     tapGenerator,
     serveOrder,
