@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Item from './Item';
-import { CHAIN_TIER_COUNT, CHAIN_TIER_LABELS, type Item as ItemType } from '../game/types';
+import { CHAIN_TIER_COUNT, tierLabel, type Item as ItemType } from '../game/types';
 
 /**
  * Full-screen storage view (opened from the main interface): 8 clearly
@@ -42,7 +42,7 @@ export default function StorageView({
               onClick={() => setSelected(slot && !isSel ? i : null)}
               aria-label={
                 slot
-                  ? `${CHAIN_TIER_LABELS[slot.chain][slot.tier - 1]} (slot ${i + 1})`
+                  ? `${tierLabel(slot.chain, slot.tier)} (slot ${i + 1})`
                   : `Empty slot ${i + 1}`
               }
               style={{
@@ -80,7 +80,7 @@ export default function StorageView({
         >
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>
-              {CHAIN_TIER_LABELS[selectedItem.chain][selectedItem.tier - 1]}
+              {tierLabel(selectedItem.chain, selectedItem.tier)}
             </div>
             <div style={{ fontSize: 11, color: '#555' }}>
               Tier {selectedItem.tier} of {CHAIN_TIER_COUNT}

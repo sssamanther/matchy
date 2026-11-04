@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // In-memory localStorage (same pattern as state.test.ts).
 const store: Record<string, string> = {};
@@ -14,7 +14,7 @@ import { createInitialState, gameReducer, toPersisted, type GameState } from './
 import { createEmptyBoard, createGenerator, resetItemIds } from './board';
 import { canFulfill } from './orders';
 import { STORAGE_BASE_CAPACITY, countStored, createStorage } from './inventory';
-import { loadGame, saveGame, clearSave } from '../storage';
+import { clearSave, isSaveQuarantined, loadGame, saveGame } from '../storage';
 import { isItem, type Cell, type Item } from './types';
 
 const T0 = 1_000_000;
@@ -23,6 +23,7 @@ beforeEach(() => {
   resetItemIds();
   localStorageMock.clear();
   clearSave();
+  vi.restoreAllMocks();
 });
 
 /** Fresh game whose board contains exactly the given cells (no generators). */
@@ -363,22 +364,42 @@ describe('storage persistence and compatibility', () => {
     expect(resumed.orders).toEqual(s0.orders);
   });
 
-  it('rejects saves whose storage slots are malformed', () => {
+  it('recovers from malformed storage slots instead of rejecting the whole save', () => {
+    // Phase 0 save safety: one bad optional field must no longer throw away
+    // an otherwise healthy save — the malformed field is dropped and the
+    // player's board/progress loads normally.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const core = toPersisted(createInitialState(null, T0));
     localStorageMock.setItem(
       'matchy:save',
       JSON.stringify({ version: 1, data: { ...core, storageSlots: 'nope' } }),
     );
-    expect(loadGame()).toBeNull();
+    const loaded = loadGame();
+    expect(loaded).not.toBeNull();
+    expect(isSaveQuarantined()).toBe(false); // recovered, not quarantined
+    expect(loaded!.storageSlots).toBeUndefined(); // corrupt field dropped
+    const resumed = createInitialState(loaded, T0);
+    expect(resumed.storageSlots).toEqual(new Array(8).fill(null));
+    expect(resumed.board).toEqual(core.board); // progress preserved
+    expect(resumed.progress.stars).toBe(core.progress.stars);
   });
 
-  it('rejects saves that smuggle a generator into storage', () => {
+  it('strips a generator smuggled into storage instead of rejecting the save', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const core = toPersisted(createInitialState(null, T0));
     localStorageMock.setItem(
       'matchy:save',
       JSON.stringify({ version: 1, data: { ...core, storageSlots: [{ id: 1, kind: 'generator', chain: 'frog' }] } }),
     );
-    expect(loadGame()).toBeNull();
+    const loaded = loadGame();
+    expect(loaded).not.toBeNull();
+    expect(isSaveQuarantined()).toBe(false);
+    const resumed = createInitialState(loaded, T0);
+    // normalizeStorage keeps generators out of storage — now by recovery,
+    // not by rejecting the player's entire save.
+    expect(resumed.storageSlots).toEqual(new Array(8).fill(null));
+    expect(resumed.board).toEqual(core.board);
+    expect(resumed.progress.stars).toBe(core.progress.stars);
   });
 
   it('sanitizes a nonsensical capacity instead of corrupting storage', () => {

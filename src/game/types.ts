@@ -35,6 +35,39 @@ export function generatorName(chain: ChainId): string {
   return GENERATOR_NAMES[chain] ?? `${chain} generator`;
 }
 
+/**
+ * Neutral emoji fallback used when a save references a chain this build does
+ * not recognize (e.g. a save written by a future/older build). Rendered instead
+ * of `undefined` so unknown-chain items can never show as an empty box.
+ */
+export const UNKNOWN_CHAIN_EMOJI = '❓';
+
+/**
+ * Emoji for a chain, safe for arbitrary strings. Saves are validated only for
+ * *shape* (any string chain passes), so UI code must never assume the chain is
+ * one this build knows about — always go through this helper instead of
+ * indexing `CHAIN_EMOJI` directly.
+ */
+export function chainEmoji(chain: ChainId | string): string {
+  return (CHAIN_EMOJI as unknown as Record<string, string | undefined>)[chain] ?? UNKNOWN_CHAIN_EMOJI;
+}
+
+/**
+ * Human-readable label for a chain + tier, safe for arbitrary save data:
+ * - known chain, known tier   -> e.g. "Frog", "Bouquet"
+ * - known chain, unknown tier -> e.g. "Tier 9" (tiers beyond this build's set)
+ * - unknown chain             -> "Item" (identity of a legacy/future chain)
+ *
+ * Never throws — an unreadable save must degrade to a placeholder, not crash
+ * the board.
+ */
+export function tierLabel(chain: ChainId | string, tier: number): string {
+  const labels = (CHAIN_TIER_LABELS as unknown as Record<string, readonly string[] | undefined>)[chain];
+  const t = Number.isFinite(tier) ? Math.max(0, Math.floor(tier)) : 0;
+  if (!labels) return 'Item';
+  return labels[t - 1] ?? `Tier ${t}`;
+}
+
 /** Human-readable tier labels per chain (index 0 = tier 1). */
 export const CHAIN_TIER_LABELS: Record<ChainId, readonly string[]> = {
   frog: ['Tadpole', 'Froglet', 'Frog', 'Pond Frog', 'Frog Prince'],

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Art from './Art';
 import { itemArt } from '../game/art';
-import { CHAIN_EMOJI, CHAIN_TIER_LABELS } from '../game/types';
+import { chainEmoji, tierLabel } from '../game/types';
 import type { Board, Order, OrderRequirement } from '../game/types';
 import { canFulfill, countAvailable, rewardFor } from '../game/orders';
 
@@ -17,7 +17,7 @@ function capitalize(s: string): string {
 export function orderTitle(order: Order): string {
   const labels: string[] = [];
   for (const r of order.requirements) {
-    const label = CHAIN_TIER_LABELS[r.chain]?.[r.tier - 1] ?? 'item';
+    const label = tierLabel(r.chain, r.tier);
     if (!labels.includes(label)) labels.push(label);
   }
   if (labels.length === 0) return 'Cozy errand';
@@ -85,7 +85,7 @@ export default function OrderPanel({
               {o.requirements.map((r: OrderRequirement, i: number) => {
                 const have = countAvailable(board, r);
                 const met = have >= r.count;
-                const label = CHAIN_TIER_LABELS[r.chain]?.[r.tier - 1] ?? 'item';
+                const label = tierLabel(r.chain, r.tier);
                 return (
                   <div
                     key={i}
@@ -102,7 +102,7 @@ export default function OrderPanel({
                     <Art
                       src={itemArt(r.chain, r.tier)}
                       alt={label}
-                      emoji={CHAIN_EMOJI[r.chain]}
+                      emoji={chainEmoji(r.chain)}
                       style={{ width: 20, height: 20, flexShrink: 0 }}
                     />
                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

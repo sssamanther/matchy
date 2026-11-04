@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installLifecycleSaveFlush, loadGame, saveGame } from './storage';
+import { clearSave, installLifecycleSaveFlush, loadGame, saveGame } from './storage';
 import { createInitialState, gameReducer, toPersisted, type GameState } from './game/state';
 import { resetItemIds } from './game/board';
 import { PLOTS } from './game/plots';
@@ -19,6 +19,7 @@ const T0 = 1_000_000;
 beforeEach(() => {
   resetItemIds();
   localStorageMock.clear();
+  clearSave(); // reset save-quarantine flags between tests
   vi.restoreAllMocks();
 });
 

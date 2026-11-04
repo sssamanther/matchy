@@ -22,7 +22,7 @@ import {
   normalizeStorage,
   type StorageSlots,
 } from './inventory';
-import { CHAIN_TIER_COUNT, isItem } from './types';
+import { CHAIN_TIER_COUNT, CHAINS, isItem } from './types';
 import type { Board, Cell, ChainId, Item, Order, Position, Plot } from './types';
 
 export const SAVE_VERSION = 1;
@@ -183,6 +183,19 @@ function initOrders(chains: ChainId[], plotIndex: number, completedOrders: numbe
   return generateOrderSet(chains, plotIndex, completedOrders, level);
 }
 
+/**
+ * Hydration-time guard against chain ids this build does not recognize (a
+ * save written by a future or older build). Unknown chains are dropped so
+ * order generation can never request items no generator can ever produce;
+ * an empty result falls back to the starting pair. Valid saves are unchanged.
+ */
+function sanitizeUnlockedChains(chains: ChainId[] | undefined): ChainId[] {
+  const known = Array.from(
+    new Set((chains ?? []).filter((c) => (CHAINS as readonly string[]).includes(c))),
+  );
+  return known.length > 0 ? known : (['frog', 'flower'] as ChainId[]);
+}
+
 export function createInitialState(saved?: PersistedGameState | null, now: number = Date.now()): GameState {
   if (saved) {
     // Reconcile against the XP-derived level: a save written by an older
@@ -191,11 +204,15 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     const level = Math.max(saved.level && saved.level > 0 ? saved.level : 0, xpLevel);
     // Optional storage fields: legacy saves simply hydrate to empty storage.
     const storageCapacity = normalizeCapacity(saved.storageCapacity);
+    const unlockedChains = sanitizeUnlockedChains(saved.unlockedChains);
+    const pendingGenerators = (saved.pendingGenerators ?? []).filter((c) =>
+      (CHAINS as readonly string[]).includes(c),
+    );
     const base: GameState = {
       version: SAVE_VERSION,
       plotIndex: saved.plotIndex,
       board: saved.board,
-      orders: migrateOrders(saved.orders),
+      orders: saved.orders,
       progress: { ...saved.progress, completedOrders: saved.progress.completedOrders ?? 0 },
       unlockedPlots: saved.unlockedPlots ?? [1],
       ...regenerateEnergy(
@@ -207,8 +224,8 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       xp: saved.xp ?? 0,
       level: 0,
       completedRestoration: saved.completedRestoration ?? [],
-      unlockedChains: saved.unlockedChains ?? (['frog', 'flower'] as ChainId[]),
-      pendingGenerators: saved.pendingGenerators ?? [],
+      unlockedChains,
+      pendingGenerators,
       gardenUnlocks: computeUnlockedFeatures((saved.completedRestoration ?? []).length, saved.gardenUnlocks ?? []),
       selectedGoalId: saved.selectedGoalId ?? null,
       storageCapacity,
@@ -219,16 +236,29 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       nudge: false,
     };
     const hydrated = flushPendingGenerators(applyUnlocks(base, 0, level));
+    // Orders recovery: an empty orders array (legacy save, or a load-time
+    // repair that could not salvage any order) would strand the player with
+    // nothing to do — regenerate a fresh set. Saves *with* orders take the
+    // exact same migrate path as before.
+    const salvagedOrders =
+      hydrated.orders.length > 0
+        ? migrateOrders(hydrated.orders)
+        : initOrders(
+            hydrated.unlockedChains,
+            hydrated.plotIndex,
+            hydrated.progress.completedOrders,
+            hydrated.level,
+          );
     // Heal duplicate requirement sets inherited from pre-fix saves (e.g. the
     // three identical Froglet Tier 3 orders) — non-destructive: ids, progress
     // and every unique order survive untouched.
     return {
       ...hydrated,
-      orders: reconcileOrders(hydrated.orders, {
+      orders: reconcileOrders(salvagedOrders, {
         chains: hydrated.unlockedChains,
         completedOrders: hydrated.progress.completedOrders,
         plotIndex: hydrated.plotIndex,
-        existingOrders: hydrated.orders,
+        existingOrders: salvagedOrders,
         board: hydrated.board,
         level: hydrated.level,
       }),

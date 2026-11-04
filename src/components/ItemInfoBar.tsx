@@ -1,6 +1,6 @@
 import Art from './Art';
 import { itemArt } from '../game/art';
-import { CHAIN_EMOJI, CHAIN_TIER_COUNT, CHAIN_TIER_LABELS, type ChainId, type Item } from '../game/types';
+import { CHAIN_TIER_COUNT, chainEmoji, tierLabel, type ChainId, type Item } from '../game/types';
 
 /** Capitalised display name for a chain (e.g. frog -> "Frog"). */
 function chainName(chain: ChainId): string {
@@ -24,7 +24,7 @@ export default function ItemInfoBar({
   storageFull: boolean;
   onStore: () => void;
 }) {
-  const label = CHAIN_TIER_LABELS[item.chain][item.tier - 1];
+  const label = tierLabel(item.chain, item.tier);
   return (
     <div
       style={{
@@ -42,7 +42,7 @@ export default function ItemInfoBar({
       <Art
         src={itemArt(item.chain, item.tier)}
         alt={label}
-        emoji={CHAIN_EMOJI[item.chain]}
+        emoji={chainEmoji(item.chain)}
         style={{ width: 26, height: 26, flexShrink: 0 }}
       />
       <div style={{ minWidth: 0, flex: 1 }}>

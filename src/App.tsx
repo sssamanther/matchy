@@ -8,6 +8,11 @@ import Sparkles from './components/Sparkles';
 import PlotSelect from './components/PlotSelect';
 import ItemInfoBar from './components/ItemInfoBar';
 import StorageView from './components/StorageView';
+import {
+  discardUnreadableSave,
+  hasPreservedSaveBackup,
+  isSaveQuarantined,
+} from './storage';
 
 function formatCountdown(updatedAt: number): string {
   const remaining = Math.max(0, 60000 - (Date.now() - updatedAt));
@@ -20,6 +25,7 @@ function formatCountdown(updatedAt: number): string {
 export default function App() {
   const g = useGame();
   const [screen, setScreen] = useState<'play' | 'garden' | 'plots' | 'storage'>('play');
+  const [saveNoticeDismissed, setSaveNoticeDismissed] = useState(false);
   const [levelUp, setLevelUp] = useState(false);
   const [starReward, setStarReward] = useState<number | null>(null);
   const prevLevel = useRef(g.level);
@@ -50,6 +56,13 @@ export default function App() {
   const goalProgress = goal ? Math.min(g.starBalance / goal.cost, 1) : 0;
   const goalRemaining = goal ? Math.max(goal.cost - g.starBalance, 0) : 0;
 
+  // Save-safety notice: an existing save failed validation and is quarantined
+  // (saving is paused so this fresh session cannot overwrite it). Re-evaluated
+  // every render; the player explicitly confirms starting over, which keeps
+  // the preserved backup untouched.
+  const saveQuarantined = isSaveQuarantined();
+  const backupKept = hasPreservedSaveBackup();
+
   if (screen === 'plots') {
     return (
       <PlotSelect
@@ -69,6 +82,49 @@ export default function App() {
         .pop { animation: pop 0.3s ease; }
       `}</style>
       <EnergyBar energy={g.energy} maxEnergy={g.maxEnergy} energyUpdatedAt={g.energyUpdatedAt} onDevRefill={g.devRefillEnergy} />
+      {saveQuarantined && !saveNoticeDismissed && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#fff3e0',
+            border: '1px solid #ffb74d',
+            borderRadius: 10,
+            padding: '6px 8px',
+            marginBottom: 4,
+            fontSize: 12,
+            minWidth: 0,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            ⚠️ Your saved progress couldn&rsquo;t be read
+            {backupKept ? ' — a backup was kept' : ' — it was left untouched'}. Saving is paused so
+            it can&rsquo;t be overwritten.
+          </div>
+          <button
+            onClick={() => {
+              if (discardUnreadableSave()) setSaveNoticeDismissed(true);
+            }}
+            disabled={!backupKept}
+            title={backupKept ? 'Start a new game (the unreadable save stays in backup)' : 'Backup not written yet — try again shortly'}
+            style={{
+              fontSize: 12,
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: '1px solid #ffb74d',
+              background: '#fff',
+              color: '#e65100',
+              fontWeight: 600,
+              cursor: backupKept ? 'pointer' : 'default',
+              opacity: backupKept ? 1 : 0.6,
+              flexShrink: 0,
+            }}
+          >
+            Start fresh
+          </button>
+        </div>
+      )}
       <div style={{ fontSize: 12, marginBottom: 2 }}>⭐ Stars: {g.starBalance}</div>
       {goal && (
         <div style={{ fontSize: 11, marginBottom: 2 }}>
