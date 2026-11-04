@@ -22,7 +22,7 @@ import {
   normalizeStorage,
   type StorageSlots,
 } from './inventory';
-import { CHAIN_TIER_COUNT, CHAINS, isItem } from './types';
+import { CHAIN_TIER_COUNT, CHAINS, isGenerator, isItem } from './types';
 import type { Board, Cell, ChainId, Item, Order, Position, Plot } from './types';
 
 export const SAVE_VERSION = 1;
@@ -138,6 +138,56 @@ function applyUnlocks(state: GameState, prevLevel: number, newLevel: number): Ga
 }
 
 /**
+ * Attempt to restore missing generators for unlocked chains that have no
+ * generator on the board and are not already pending delivery.
+ * - Places a generator in the first empty board cell.
+ * - When the board is full, adds the chain to pendingGenerators instead.
+ * - Never replaces existing items or generators; never duplicates.
+ * - Idempotent: running it repeatedly on the same state produces identical results.
+ */
+function reconcileGenerators(state: GameState): GameState {
+  // If there's nothing to reconcile, return early.
+  if (state.unlockedChains.length === 0) return state;
+  // Build a set of chains that already have a generator on the board.
+  const boardChains = new Set<ChainId>();
+  for (const row of state.board) {
+    for (const cell of row) {
+      if (isGenerator(cell) && (CHAINS as readonly string[]).includes(cell.chain)) {
+        boardChains.add(cell.chain);
+      }
+    }
+  }
+  // Build a set of chains already pending delivery.
+  const pendingSet = new Set<ChainId>(state.pendingGenerators ?? []);
+  // Determine which unlocked chains still need a generator.
+  const needsGenerator: ChainId[] = [];
+  for (const ch of state.unlockedChains) {
+    if (!boardChains.has(ch) && !pendingSet.has(ch)) {
+      needsGenerator.push(ch);
+    }
+  }
+  if (needsGenerator.length === 0) return state; // nothing to do
+
+  let s = { ...state, pendingGenerators: [...(state.pendingGenerators ?? [])] };
+  let board = s.board.map((row) => row.slice());
+  for (const ch of needsGenerator) {
+    const cell = findEmptyCell(board);
+    if (cell) {
+      // Place generator in empty cell.
+      const b = board.map((row) => row.slice());
+      b[cell.row][cell.col] = createGenerator(ch);
+      board = b;
+    } else {
+      // Board is full — queue for later delivery.
+      if (!s.pendingGenerators!.includes(ch)) {
+        s.pendingGenerators!.push(ch);
+      }
+    }
+  }
+  return { ...s, board };
+}
+
+/**
  * Deliver queued generator unlocks into free cells without ever
  * overwriting existing cells. Chains that still have no room stay queued
  * (exactly once), so a pending unlock is never lost or granted twice.
@@ -179,8 +229,8 @@ function initBoard(plot: Plot): Board {
   return b;
 }
 
-function initOrders(chains: ChainId[], plotIndex: number, completedOrders: number, level: number): Order[] {
-  return generateOrderSet(chains, plotIndex, completedOrders, level);
+function initOrders(chains: ChainId[], board: Board, completedOrders: number, level: number): Order[] {
+  return generateOrderSet(chains, completedOrders, level, board);
 }
 
 /**
@@ -235,7 +285,7 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
       sparkle: null,
       nudge: false,
     };
-    const hydrated = flushPendingGenerators(applyUnlocks(base, 0, level));
+    const hydrated = flushPendingGenerators(reconcileGenerators(applyUnlocks(base, 0, level)));
     // Orders recovery: an empty orders array (legacy save, or a load-time
     // repair that could not salvage any order) would strand the player with
     // nothing to do — regenerate a fresh set. Saves *with* orders take the
@@ -245,19 +295,19 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
         ? migrateOrders(hydrated.orders)
         : initOrders(
             hydrated.unlockedChains,
-            hydrated.plotIndex,
+            hydrated.board,
             hydrated.progress.completedOrders,
             hydrated.level,
           );
-    // Heal duplicate requirement sets inherited from pre-fix saves (e.g. the
-    // three identical Froglet Tier 3 orders) — non-destructive: ids, progress
-    // and every unique order survive untouched.
+    // Heal defects inherited from older saves: duplicate requirement sets
+    // (e.g. the three identical Froglet Tier 3 orders) and orders whose
+    // chains are no longer producible on the board — non-destructive: ids,
+    // progress and every healthy order survive untouched.
     return {
       ...hydrated,
       orders: reconcileOrders(salvagedOrders, {
         chains: hydrated.unlockedChains,
         completedOrders: hydrated.progress.completedOrders,
-        plotIndex: hydrated.plotIndex,
         existingOrders: salvagedOrders,
         board: hydrated.board,
         level: hydrated.level,
@@ -265,11 +315,12 @@ export function createInitialState(saved?: PersistedGameState | null, now: numbe
     };
   }
   const plot = PLOTS[0];
+  const board = initBoard(plot);
   return {
     version: SAVE_VERSION,
     plotIndex: 0,
-    board: initBoard(plot),
-    orders: initOrders(['flower', 'frog'], 0, 0, levelFromXp(0)),
+    board,
+    orders: initOrders(['flower', 'frog'], board, 0, levelFromXp(0)),
     progress: initialProgress(),
     unlockedPlots: [1],
     energy: ENERGY_CONFIG.startingEnergy,
@@ -432,7 +483,6 @@ function reduceAction(state: GameState, action: GameAction): GameState {
       const newOrder = generateOrder({
         chains,
         completedOrders: newCompleted,
-        plotIndex: state.plotIndex,
         existingOrders: state.orders.filter((_, i) => i !== orderIndex),
         board: nextBoard,
         level: newLevel,
@@ -466,13 +516,14 @@ function reduceAction(state: GameState, action: GameAction): GameState {
       const unlocked = state.unlockedPlots.includes(next.id)
         ? state.unlockedPlots
         : [...state.unlockedPlots, next.id];
+      // One persistent merge board: switching scenes only advances the legacy
+      // plot metadata. The board, orders, storage, energy, stars, XP and all
+      // other progress are never reset by a scene switch.
       return {
         ...state,
         plotIndex: state.plotIndex + 1,
-        board: initBoard(next),
-        orders: initOrders(state.unlockedChains, state.plotIndex + 1, state.progress.completedOrders, state.level),
         unlockedPlots: unlocked,
-        progress: { ...state.progress, currentPlot: next.id, plotStars: 0 },
+        progress: { ...state.progress, currentPlot: next.id },
         hint: null,
         sparkle: null,
         nudge: false,
@@ -484,12 +535,12 @@ function reduceAction(state: GameState, action: GameAction): GameState {
       const p = PLOTS[action.index];
       if (!p) return state;
       if (!state.unlockedPlots.includes(p.id)) return state;
+      // Same rule as NEXT_PLOT: scene selection is compatibility metadata —
+      // it never rebuilds the board or regenerates orders.
       return {
         ...state,
         plotIndex: action.index,
-        board: initBoard(p),
-        orders: initOrders(state.unlockedChains, action.index, state.progress.completedOrders, state.level),
-        progress: { ...state.progress, currentPlot: p.id, plotStars: 0 },
+        progress: { ...state.progress, currentPlot: p.id },
         hint: null,
         sparkle: null,
         nudge: false,

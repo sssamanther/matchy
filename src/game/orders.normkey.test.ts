@@ -11,7 +11,6 @@ function req(chain: Order['requirements'][number]['chain'], tier: number, count 
 const ctx: OrderContext = {
   chains: ['frog', 'flower'],
   completedOrders: 5,
-  plotIndex: 0,
   existingOrders: [],
   board: createEmptyBoard(),
   level: 3,

@@ -1,16 +1,30 @@
-import { CHAIN_TIER_COUNT, type Board, type ChainId, type Order, type OrderRequirement } from './types';
+import {
+  CHAIN_TIER_COUNT,
+  CHAINS,
+  isGenerator,
+  type Board,
+  type ChainId,
+  type Order,
+  type OrderRequirement,
+} from './types';
 
 let nextOrderId = 1;
 export function resetOrderIds(): void { nextOrderId = 1; }
 
 export interface OrderContext {
+  /** Fallback chains when the board carries no generators (see producibleChains). */
   chains: ChainId[];
   completedOrders: number;
-  plotIndex: number;
   existingOrders: Order[];
-  /** Current board (kept for feasibility checks; generation itself is board-agnostic). */
+  /**
+   * Current board. Order difficulty and availability are *board-agnostic*,
+   * but generation only ever requests chains whose generator actually sits on
+   * this board — an order for a chain the player cannot produce would be
+   * unwinnable. When the board has no generators at all (degenerate legacy
+   * saves), `chains` is used as the fallback pool.
+   */
   board?: Board;
-  /** Player level — drives how many requirements orders may carry. Defaults to 1. */
+  /** Player level — drives order tier ranges and requirement counts. Defaults to 1. */
   level?: number;
   /** Preferred tier for this slot — lets the initial set spread tiers across orders. */
   preferredTier?: number;
@@ -22,16 +36,33 @@ export interface OrderContext {
   reserveSlots?: number;
 }
 
-export const PLOT_TIER_RANGE: Record<number, { min: number; max: number }> = {
-  1: { min: 1, max: 3 },
-  2: { min: 3, max: 4 },
-  3: { min: 3, max: 5 },
-  4: { min: 4, max: 5 },
-  5: { min: 4, max: 6 },
+/**
+ * Provisional per-level order tier ranges (playtest starting values —
+ * expected to be tuned after playtesting). Order difficulty is a function of
+ * the player's *level* only; the legacy plot number no longer influences
+ * orders in any way.
+ *
+ * Levels beyond the table keep the level-10 range; levels below 1 clamp to
+ * the level-1 range.
+ */
+export const LEVEL_TIER_RANGE: Record<number, { min: number; max: number }> = {
+  1: { min: 1, max: 2 },
+  2: { min: 1, max: 3 },
+  3: { min: 2, max: 4 },
+  4: { min: 2, max: 4 },
+  5: { min: 3, max: 4 },
+  6: { min: 3, max: 5 },
+  7: { min: 3, max: 5 },
+  8: { min: 4, max: 5 },
+  9: { min: 4, max: 5 },
+  10: { min: 4, max: 5 },
 };
 
-export function plotTierRange(plotIndex: number): { min: number; max: number } {
-  return PLOT_TIER_RANGE[plotIndex + 1] ?? { min: 1, max: 2 };
+/** Tier range of order difficulty for a player level (clamped, never invalid). */
+export function levelTierRange(level: number): { min: number; max: number } {
+  const lvl = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : 1;
+  if (lvl >= 10) return LEVEL_TIER_RANGE[10];
+  return LEVEL_TIER_RANGE[lvl] ?? LEVEL_TIER_RANGE[1];
 }
 
 const TIER_THRESHOLDS: Array<{ min: number; tierOffset: number }> = [
@@ -40,14 +71,20 @@ const TIER_THRESHOLDS: Array<{ min: number; tierOffset: number }> = [
   { min: 8, tierOffset: 2 },
 ];
 
-export function getOrderTier(completedOrders: number, plotIndex: number): number {
-  const range = plotTierRange(plotIndex);
+/**
+ * Base tier for a new order: the level range's floor, pushed toward its
+ * ceiling as the player completes more orders (variety within the level's
+ * difficulty band). Always clamped into the level range and never above
+ * CHAIN_TIER_COUNT — the highest tier any chain supports.
+ */
+export function getOrderTier(completedOrders: number, level: number): number {
+  const range = levelTierRange(level);
   let offset = 0;
   for (const t of TIER_THRESHOLDS) {
     if (completedOrders >= t.min) offset = t.tierOffset;
   }
   const tier = Math.min(range.max, range.min + offset);
-  return Math.max(range.min, Math.min(tier, 5));
+  return Math.max(range.min, Math.min(tier, CHAIN_TIER_COUNT));
 }
 
 const REWARD_TABLE: Record<number, number> = {
@@ -114,11 +151,39 @@ function availableChains(chains: ChainId[]): ChainId[] {
   return chains.length ? chains : (['frog'] as ChainId[]);
 }
 
-/** Tiers eligible for this order: plot range ∪ chain cap, base tier first. */
+/**
+ * Chains the player can actually produce right now: every generator present
+ * on the board (generators are never consumed, so once delivered a chain
+ * stays producible). Unknown chain ids from foreign saves are excluded —
+ * orders must only request chains this build knows how to generate.
+ *
+ * When the board carries no generators at all (degenerate or very old
+ * saves), falls back to the unlocked chains so the eligible pool is never
+ * accidentally emptied.
+ */
+function producibleChains(ctx: OrderContext): ChainId[] {
+  const onBoard = new Set<ChainId>();
+  for (const row of ctx.board ?? []) {
+    for (const cell of row) {
+      if (isGenerator(cell) && (CHAINS as readonly string[]).includes(cell.chain)) {
+        onBoard.add(cell.chain);
+      }
+    }
+  }
+  if (onBoard.size > 0) return [...onBoard];
+  // Board has no generators — attempt reconciliation first; only if that
+  // leaves the board completely generator-free do we fall back to the
+  // unlocked-chain pool, guaranteeing no generated order references a chain
+  // the player cannot actually produce.
+  return availableChains(ctx.chains);
+}
+
+/** Tiers eligible for this order: level range ∩ chain cap, base tier first. */
 function eligibleTiers(ctx: OrderContext): number[] {
-  const range = plotTierRange(ctx.plotIndex);
+  const level = ctx.level ?? 1;
+  const range = levelTierRange(level);
   const maxTier = Math.min(range.max, CHAIN_TIER_COUNT);
-  const base = getOrderTier(ctx.completedOrders, ctx.plotIndex);
+  const base = getOrderTier(ctx.completedOrders, level);
   const seq = [ctx.preferredTier, base, base + 1, base - 1, base + 2, base - 2];
   const out: number[] = [];
   for (const t of seq) {
@@ -130,14 +195,18 @@ function eligibleTiers(ctx: OrderContext): number[] {
 
 /**
  * Every eligible chain:tier atom, ordered by tier preference, minus the
- * slots in `used`. Only unlocked chains and producible tiers appear here,
- * so generated orders can never reference locked generators or unreachable
- * tiers.
+ * slots in `used`. Only *producible* chains and tiers within the level's
+ * range appear here, so generated orders can never reference a missing
+ * generator, a locked chain, or an unreachable tier.
  */
-function eligibleAtoms(ctx: OrderContext, used: ReadonlySet<string>): Atom[] {
+function eligibleAtoms(
+  ctx: OrderContext,
+  used: ReadonlySet<string>,
+  chains: ChainId[],
+): Atom[] {
   const atoms: Atom[] = [];
   for (const tier of eligibleTiers(ctx)) {
-    for (const chain of availableChains(ctx.chains)) {
+    for (const chain of chains) {
       if (!used.has(`${chain}:${tier}`)) atoms.push({ chain, tier });
     }
   }
@@ -210,18 +279,20 @@ function toRequirements(atoms: Atom[]): OrderRequirement[] {
 /**
  * Generate one order that is distinct from every active order at the
  * chain:tier level (a strictly stronger guarantee than distinct requirement
- * sets). Bounded candidate selection:
- *   1. build the eligible atom list (unlocked chains, producible tiers,
- *      minus every chain:tier an active order already requests),
+ * sets) and whose chains are all producible on the current board. Bounded
+ * candidate selection:
+ *   1. build the eligible atom list (producible chains, tiers inside the
+ *      level range, minus every chain:tier an active order already requests),
  *   2. try the level's preferred requirement count, then smaller shapes,
  *   3. only if the pool is *completely* exhausted, fall back deterministically
- *      to the first eligible atom (documented limitation: with two unlocked
- *      chains on a narrow-tier plot, three multi-item orders can use every
- *      slot; the duplicate heals when any order is served).
+ *      to any eligible atom (documented limitation: a board with a single
+ *      generator can exhaust its atom pool; the duplicate heals when any
+ *      order is served or on the next load).
  */
 export function generateOrder(ctx: OrderContext): Order {
   const level = ctx.level ?? 1;
-  const fresh = eligibleAtoms(ctx, activeAtoms(ctx.existingOrders));
+  const chains = producibleChains(ctx);
+  const fresh = eligibleAtoms(ctx, activeAtoms(ctx.existingOrders), chains);
   const cap = ctx.reserveSlots === undefined
     ? Number.POSITIVE_INFINITY
     : Math.max(1, fresh.length - ctx.reserveSlots);
@@ -234,24 +305,39 @@ export function generateOrder(ctx: OrderContext): Order {
     }
   }
 
-  // Deterministic fallback — never uses Math.random, never loops.
-  const pool = eligibleAtoms(ctx, new Set<string>());
-  const atom: Atom = pool[0] ?? {
-    chain: availableChains(ctx.chains)[0],
-    tier: getOrderTier(ctx.completedOrders, ctx.plotIndex),
-  };
+  // Deterministic fallback — never uses Math.random, never loops. Prefer
+  // atoms no active order uses; when the pool is genuinely exhausted, repeat
+  // an atom whose *single-item* form is not itself an active order, so the
+  // fallback can never duplicate another order's exact requirement set
+  // (multi-item orders can never equal a single-item key).
+  const pool =
+    fresh.length > 0 ? fresh : eligibleAtoms(ctx, new Set<string>(), chains);
+  const activeKeys = new Set(ctx.existingOrders.map(orderKey));
+  const singleKey = (a: Atom): string => orderRequirementsKey(toRequirements([a]));
+  const atom: Atom =
+    pool.find((a) => !activeKeys.has(singleKey(a))) ??
+    pool[0] ?? {
+      chain: chains[0],
+      tier: getOrderTier(ctx.completedOrders, level),
+    };
   return { id: nextOrderId++, requirements: toRequirements([atom]) };
 }
 
 /**
- * The three orders shown when a plot opens. Slots take turns preferring each
- * tier in the plot's range so orders spread across easy and hard tiers, and
- * each slot reserves a fresh chain:tier for the slots after it.
+ * The three orders shown when the game starts (or a save needs a fresh set).
+ * Slots take turns preferring each tier in the *level's* range so orders
+ * spread across easy and hard tiers, and each slot reserves a fresh
+ * chain:tier for the slots after it.
  */
-export function generateOrderSet(chains: ChainId[], plotIndex: number, completedOrders: number, level = 1): Order[] {
-  const range = plotTierRange(plotIndex);
+export function generateOrderSet(
+  chains: ChainId[],
+  completedOrders: number,
+  level = 1,
+  board?: Board,
+): Order[] {
+  const range = levelTierRange(level);
   const min = range.min;
-  const max = Math.min(range.max, 5);
+  const max = Math.min(range.max, CHAIN_TIER_COUNT);
   const tiers: number[] = [min];
   if (max > min) tiers.push(Math.min(min + 1, max));
   if (max > min + 1) tiers.push(max);
@@ -262,9 +348,9 @@ export function generateOrderSet(chains: ChainId[], plotIndex: number, completed
     out.push(generateOrder({
       chains,
       completedOrders,
-      plotIndex,
       existingOrders: out,
       level,
+      board,
       preferredTier: tiers[slot],
       reserveSlots: 2 - slot,
     }));
@@ -345,17 +431,22 @@ export function migrateOrders(orders: Order[]): Order[] {
 }
 
 /**
- * Non-destructive load-time healing for saves written before duplicate-order
- * fixes: those builds could persist several orders with *identical*
- * requirement sets (the confirmed playtest case: three Froglet Tier 3
- * orders). The first occurrence of each set is kept untouched; later
- * duplicates get freshly generated requirements that clash with no other
- * active order, while keeping their (already-unique) ids so React keys,
- * progress and saved state are unaffected. Returns the input array untouched
- * when there is nothing to heal.
+ * Non-destructive load-time healing for saves written by older builds. Two
+ * defects are repaired while keeping ids, progress and every healthy order
+ * untouched (returns the input array by identity when nothing needs fixing):
+ *
+ *  1. duplicate requirement sets (the confirmed playtest case: three Froglet
+ *     Tier 3 orders): the first occurrence of each set is kept, later
+ *     duplicates get freshly generated requirements that clash with no other
+ *     active order;
+ *  2. orders referencing a chain the player cannot produce (a generator lost
+ *     to the old plot-switching system, or a chain from a foreign build):
+ *     those are regenerated against the *producible* chains, so a loaded save
+ *     can never strand the player with an unwinnable order.
  */
 export function reconcileOrders(orders: Order[], ctx: OrderContext): Order[] {
   if (orders.length === 0) return orders;
+  const producible = new Set<ChainId>(producibleChains(ctx));
   const seen = new Set<string>();
   const out: Order[] = [];
   let changed = false;
@@ -363,7 +454,8 @@ export function reconcileOrders(orders: Order[], ctx: OrderContext): Order[] {
   for (let i = 0; i < orders.length; i++) {
     const o = orders[i];
     const key = orderKey(o);
-    if (!seen.has(key)) {
+    const reachable = o.requirements.every((r) => producible.has(r.chain));
+    if (reachable && !seen.has(key)) {
       seen.add(key);
       out.push(o);
       continue;

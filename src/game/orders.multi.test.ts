@@ -14,14 +14,14 @@ import {
   countAvailable,
   generateOrder,
   generateOrderSet,
-  plotTierRange,
+  levelTierRange,
   resetOrderIds,
   type OrderContext,
 } from './orders';
 import { createInitialState, gameReducer, toPersisted, type PersistedGameState } from './state';
-import { createEmptyBoard, createItem, resetItemIds } from './board';
+import { createEmptyBoard, createGenerator, createItem, resetItemIds } from './board';
 import { clearSave, loadGame, saveGame } from '../storage';
-import { CHAINS, type Board, type ChainId, type Order, type OrderRequirement } from './types';
+import { CHAIN_TIER_COUNT, CHAINS, type Board, type ChainId, type Order, type OrderRequirement } from './types';
 
 beforeEach(() => {
   resetOrderIds();
@@ -52,7 +52,7 @@ function ctx(overrides: Partial<OrderContext> = {}): OrderContext {
   return {
     chains: ['frog', 'flower'],
     completedOrders: 5,
-    plotIndex: 0,
+    level: 2,
     existingOrders: [],
     board: createEmptyBoard(),
     ...overrides,
@@ -61,10 +61,16 @@ function ctx(overrides: Partial<OrderContext> = {}): OrderContext {
 
 /** A Level 3 save written by a pre-fix build: three identical Froglet Tier 3 orders. */
 function frogletSave(): PersistedGameState {
+  // Real saves always carry their generators (the fresh board starts with
+  // frog + flower; level unlocks add more), so the fixture does too — only
+  // the duplicate-order defect is under test here.
+  const board = createEmptyBoard();
+  board[6][5] = createGenerator('flower');
+  board[6][6] = createGenerator('frog');
   return {
     version: 1,
     plotIndex: 0,
-    board: createEmptyBoard(),
+    board,
     orders: [
       { id: 4, requirements: [req('frog', 3)] },
       { id: 5, requirements: [req('frog', 3)] },
@@ -170,26 +176,26 @@ describe('duplicate prevention during generation', () => {
     }
   });
 
-  it('initial sets across all levels and plots have unique atoms, keys and ids', () => {
+  it('initial sets across all levels have unique atoms, keys and ids within the level range', () => {
     const chainSets: ChainId[][] = [
       ['flower', 'frog'],
       ['flower', 'frog', 'plant', 'mushroom'],
       [...CHAINS],
     ];
     for (const chains of chainSets) {
-      for (let plotIndex = 0; plotIndex < 5; plotIndex++) {
+      for (let level = 1; level <= 10; level++) {
         for (let i = 0; i < 20; i++) {
-          const set = generateOrderSet(chains, plotIndex, i * 4, chains.length + 2);
+          const set = generateOrderSet(chains, i * 4, level);
           expect(set).toHaveLength(3);
           expect(new Set(set.map((o) => o.id)).size).toBe(3);
           expect(new Set(set.map(setKey)).size).toBe(3);
           const atoms = atomsOf(set);
           expect(new Set(atoms).size).toBe(atoms.length);
-          const range = plotTierRange(plotIndex);
+          const range = levelTierRange(level);
           for (const r of set.flatMap((o) => o.requirements)) {
             expect(chains).toContain(r.chain);
             expect(r.tier).toBeGreaterThanOrEqual(range.min);
-            expect(r.tier).toBeLessThanOrEqual(Math.min(range.max, 5));
+            expect(r.tier).toBeLessThanOrEqual(Math.min(range.max, CHAIN_TIER_COUNT));
             expect(r.count).toBeGreaterThanOrEqual(1);
           }
         }
@@ -215,7 +221,7 @@ describe('multi-item order generation scales with level', () => {
     let doubles = 0;
     let total = 0;
     for (let i = 0; i < 150; i++) {
-      const set = generateOrderSet(['flower', 'frog'], 0, 0, 1);
+      const set = generateOrderSet(['flower', 'frog'], 0, 1);
       for (const o of set) {
         total++;
         if (o.requirements.length === 1) singles++;
@@ -250,9 +256,9 @@ describe('multi-item order generation scales with level', () => {
   it('level 7+ initial sets include three-item orders', () => {
     let triples = 0;
     for (let i = 0; i < 100; i++) {
-      const set = generateOrderSet([...CHAINS], 2, 30, 7);
+      const set = generateOrderSet([...CHAINS], 30, 7);
       for (const o of set) if (o.requirements.length === 3) triples++;
-      // every requirement stays within the plot's producible tier range
+      // level 7 sits in the 3-5 tier band
       for (const r of set.flatMap((o) => o.requirements)) {
         expect(r.tier).toBeGreaterThanOrEqual(3);
         expect(r.tier).toBeLessThanOrEqual(5);
@@ -264,7 +270,7 @@ describe('multi-item order generation scales with level', () => {
   it('level 4-6 initial sets occasionally include three-item orders', () => {
     let triples = 0;
     for (let i = 0; i < 100; i++) {
-      const set = generateOrderSet(['flower', 'frog', 'plant', 'mushroom'], 0, 12, 5);
+      const set = generateOrderSet(['flower', 'frog', 'plant', 'mushroom'], 12, 5);
       for (const o of set) if (o.requirements.length === 3) triples++;
     }
     expect(triples).toBeGreaterThan(0);
@@ -416,7 +422,9 @@ describe('save/load compatibility', () => {
       ...createInitialState(),
       orders: [
         { id: 20, requirements: [req('frog', 2, 2), req('flower', 1, 1)] },
-        { id: 21, requirements: [req('mushroom', 3), req('frog', 1, 1), req('flower', 2)] },
+        // Only chains whose generator sits on the board (frog + flower) —
+        // orders for missing generators are healed away on load.
+        { id: 21, requirements: [req('flower', 3), req('frog', 1, 1), req('flower', 2)] },
         { id: 22, requirements: [req('frog', 3)] },
       ],
     };

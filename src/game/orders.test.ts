@@ -39,11 +39,12 @@ function item(chain: ChainId, tier: number): { chain: ChainId; tier: number; cou
 }
 
 function serveCtx(existingOrders: Order[], completedOrders = 5): OrderContext {
-  // Early-game conditions: only two chains unlocked, plot 1 tier range {1..3}.
+  // Early-game conditions: two producible chains, level 2 tier range {1..3}
+  // (the same band plot 1 used before difficulty became level-based).
   return {
     chains: ['frog', 'flower'],
     completedOrders,
-    plotIndex: 0,
+    level: 2,
     existingOrders,
     board: createEmptyBoard(),
   };
@@ -105,7 +106,7 @@ describe('replacement orders must not duplicate active orders', () => {
 
   it('initial order set has unique ids and no duplicated requirement keys', () => {
     for (let i = 0; i < 100; i++) {
-      const set = generateOrderSet(['flower', 'frog'], 0, 0);
+      const set = generateOrderSet(['flower', 'frog'], 0, 1);
       expect(set).toHaveLength(3);
       const ids = set.map((o) => o.id);
       expect(new Set(ids).size).toBe(3);

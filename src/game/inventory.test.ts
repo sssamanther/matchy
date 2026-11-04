@@ -340,7 +340,13 @@ describe('storage persistence and compatibility', () => {
     const resumed = createInitialState(loaded, T0);
     expect(resumed.storageCapacity).toBe(8);
     expect(resumed.storageSlots).toEqual(s.storageSlots);
-    expect(toPersisted(resumed)).toEqual(toPersisted(s));
+    // Reconciliation now restores missing generators for unlocked chains
+    // (starting unlockedChains are ['flower', 'frog]), so the board will
+    // contain generators even if the original save had none.
+    expect(toPersisted(resumed).storageCapacity).toBe(toPersisted(s).storageCapacity);
+    expect(toPersisted(resumed).storageSlots).toEqual(toPersisted(s).storageSlots);
+    expect(toPersisted(resumed).orders).toEqual(toPersisted(s).orders);
+    expect(toPersisted(resumed).progress).toEqual(toPersisted(s).progress);
   });
 
   it('loads legacy saves without storage fields as empty 8-slot storage', () => {
